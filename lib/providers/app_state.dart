@@ -1,0 +1,282 @@
+import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/obligation_model.dart';
+import '../models/user_model.dart';
+import '../models/insights_model.dart';
+import '../models/morning_brief_model.dart';
+import '../constants/app_constants.dart';
+
+// ── App state model ───────────────────────────────────────────────────────────
+class AppState {
+  final String? token;
+  final UserModel? user;
+  final bool isAuthenticated;
+  final List<ObligationModel> obligations;
+  final InsightsModel? insights;
+  final MorningBriefModel? morningBrief;
+  final String? lastBriefKey;
+  final bool googleConnected;
+  final String googleEmail;
+  final List<String> googleAccounts;
+  final List<String> outlookAccounts;
+  final bool isLoading;
+
+  const AppState({
+    this.token,
+    this.user,
+    this.isAuthenticated = false,
+    this.obligations = const [],
+    this.insights,
+    this.morningBrief,
+    this.lastBriefKey,
+    this.googleConnected = false,
+    this.googleEmail = '',
+    this.googleAccounts = const [],
+    this.outlookAccounts = const [],
+    this.isLoading = false,
+  });
+
+  AppState copyWith({
+    String? token,
+    UserModel? user,
+    bool? isAuthenticated,
+    List<ObligationModel>? obligations,
+    InsightsModel? insights,
+    MorningBriefModel? morningBrief,
+    String? lastBriefKey,
+    bool? googleConnected,
+    String? googleEmail,
+    List<String>? googleAccounts,
+    List<String>? outlookAccounts,
+    bool? isLoading,
+  }) {
+    return AppState(
+      token:           token           ?? this.token,
+      user:            user            ?? this.user,
+      isAuthenticated: isAuthenticated ?? this.isAuthenticated,
+      obligations:     obligations     ?? this.obligations,
+      insights:        insights        ?? this.insights,
+      morningBrief:    morningBrief    ?? this.morningBrief,
+      lastBriefKey:    lastBriefKey    ?? this.lastBriefKey,
+      googleConnected: googleConnected ?? this.googleConnected,
+      googleEmail:     googleEmail     ?? this.googleEmail,
+      googleAccounts:  googleAccounts  ?? this.googleAccounts,
+      outlookAccounts: outlookAccounts ?? this.outlookAccounts,
+      isLoading:       isLoading       ?? this.isLoading,
+    );
+  }
+}
+
+// ── App state notifier ────────────────────────────────────────────────────────
+class AppStateNotifier extends StateNotifier<AppState> {
+  AppStateNotifier() : super(AppState(obligations: kInitialObligations)) {
+    _loadPersistedState();
+  }
+
+  // ── Persistence ──────────────────────────────────────────────────────────────
+  Future<void> _loadPersistedState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token    = prefs.getString(AppConstants.keyAuthToken);
+    final userJson = prefs.getString(AppConstants.keyUser);
+    final googleAccountsJson = prefs.getString(AppConstants.keyGoogleAccounts);
+    final outlookAccountsJson= prefs.getString(AppConstants.keyOutlookAccounts);
+    final lastBriefKey = prefs.getString(AppConstants.keyLastBriefKey);
+
+    UserModel? user;
+    if (userJson != null) {
+      try { user = UserModel.fromJson(jsonDecode(userJson)); } catch (_) {}
+    }
+
+    List<String> googleAccounts = [];
+    if (googleAccountsJson != null) {
+      try { googleAccounts = List<String>.from(jsonDecode(googleAccountsJson)); } catch (_) {}
+    }
+
+    List<String> outlookAccounts = [];
+    if (outlookAccountsJson != null) {
+      try { outlookAccounts = List<String>.from(jsonDecode(outlookAccountsJson)); } catch (_) {}
+    }
+
+    state = state.copyWith(
+      token:           token,
+      user:            user,
+      isAuthenticated: token != null && user != null,
+      googleAccounts:  googleAccounts,
+      outlookAccounts: outlookAccounts,
+      googleConnected: googleAccounts.isNotEmpty,
+      googleEmail:     googleAccounts.isNotEmpty ? googleAccounts.first : '',
+      lastBriefKey:    lastBriefKey,
+    );
+  }
+
+  // ── Auth ──────────────────────────────────────────────────────────────────────
+  Future<void> setAuth(String token, UserModel user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(AppConstants.keyAuthToken, token);
+    await prefs.setString(AppConstants.keyUser, jsonEncode(user.toJson()));
+    state = state.copyWith(token: token, user: user, isAuthenticated: true);
+  }
+
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(AppConstants.keyAuthToken);
+    await prefs.remove(AppConstants.keyUser);
+    state = AppState(obligations: kInitialObligations);
+  }
+
+  void updateUser(UserModel user) {
+    state = state.copyWith(user: user);
+    _persistUser(user);
+  }
+
+  Future<void> _persistUser(UserModel user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(AppConstants.keyUser, jsonEncode(user.toJson()));
+  }
+
+  void setOnboardingComplete() {
+    if (state.user == null) return;
+    final updated = state.user!.copyWith(onboardingComplete: true);
+    updateUser(updated);
+  }
+
+  // ── Obligations ───────────────────────────────────────────────────────────────
+  void setObligations(List<ObligationModel> obs) {
+    state = state.copyWith(obligations: obs);
+  }
+
+  void addObligation(ObligationModel ob) {
+    state = state.copyWith(obligations: [ob, ...state.obligations]);
+  }
+
+  void addObligations(List<ObligationModel> obs) {
+    final completedIds = state.obligations
+        .where((o) => o.status == 'completed')
+        .map((o) => o.id)
+        .toSet();
+    final existingIds = state.obligations.map((o) => o.id).toSet();
+    final toAdd = obs.where((o) =>
+        !completedIds.contains(o.id) && !existingIds.contains(o.id)).toList();
+    if (toAdd.isEmpty) return;
+    state = state.copyWith(obligations: [...toAdd, ...state.obligations]);
+  }
+
+  void updateObligation(String id, ObligationModel Function(ObligationModel) updater) {
+    state = state.copyWith(
+      obligations: state.obligations.map((o) => o.id == id ? updater(o) : o).toList(),
+    );
+  }
+
+  void resolveObligation(String id) {
+    state = state.copyWith(
+      obligations: state.obligations.map((o) =>
+          o.id == id ? o.copyWith(status: 'completed') : o).toList(),
+    );
+  }
+
+  // ── Brief ─────────────────────────────────────────────────────────────────────
+  void setMorningBrief(MorningBriefModel brief) {
+    state = state.copyWith(morningBrief: brief);
+  }
+
+  Future<void> setLastBriefKey(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(AppConstants.keyLastBriefKey, key);
+    state = state.copyWith(lastBriefKey: key);
+  }
+
+  // ── Google accounts ───────────────────────────────────────────────────────────
+  void setGoogleConnected(bool connected) {
+    state = state.copyWith(googleConnected: connected);
+  }
+
+  void setGoogleEmail(String email) {
+    state = state.copyWith(googleEmail: email);
+  }
+
+  Future<void> addGoogleAccount(String email) async {
+    final updated = {...state.googleAccounts, email}.toList();
+    await _persistGoogleAccounts(updated);
+    state = state.copyWith(
+      googleAccounts:  updated,
+      googleConnected: true,
+      googleEmail:     state.googleEmail.isEmpty ? email : state.googleEmail,
+    );
+  }
+
+  Future<void> removeGoogleAccount(String email) async {
+    final updated = state.googleAccounts.where((e) => e != email).toList();
+    await _persistGoogleAccounts(updated);
+    state = state.copyWith(
+      googleAccounts:  updated,
+      googleConnected: updated.isNotEmpty,
+      googleEmail:     updated.isNotEmpty ? updated.first : '',
+    );
+  }
+
+  Future<void> setGoogleAccounts(List<String> accounts) async {
+    await _persistGoogleAccounts(accounts);
+    state = state.copyWith(
+      googleAccounts:  accounts,
+      googleConnected: accounts.isNotEmpty,
+      googleEmail:     accounts.isNotEmpty ? accounts.first : state.googleEmail,
+    );
+  }
+
+  Future<void> _persistGoogleAccounts(List<String> accounts) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(AppConstants.keyGoogleAccounts, jsonEncode(accounts));
+  }
+
+  // ── Outlook accounts ──────────────────────────────────────────────────────────
+  Future<void> addOutlookAccount(String email) async {
+    final updated = {...state.outlookAccounts, email}.toList();
+    await _persistOutlookAccounts(updated);
+    state = state.copyWith(outlookAccounts: updated);
+  }
+
+  Future<void> removeOutlookAccount(String email) async {
+    final updated = state.outlookAccounts.where((e) => e != email).toList();
+    await _persistOutlookAccounts(updated);
+    state = state.copyWith(outlookAccounts: updated);
+  }
+
+  Future<void> _persistOutlookAccounts(List<String> accounts) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(AppConstants.keyOutlookAccounts, jsonEncode(accounts));
+  }
+
+  // ── Insights ──────────────────────────────────────────────────────────────────
+  void setInsights(InsightsModel insights) {
+    state = state.copyWith(insights: insights);
+  }
+
+  // ── Loading ───────────────────────────────────────────────────────────────────
+  void setLoading(bool loading) {
+    state = state.copyWith(isLoading: loading);
+  }
+}
+
+// ── Provider ──────────────────────────────────────────────────────────────────
+final appStateProvider = StateNotifierProvider<AppStateNotifier, AppState>(
+  (ref) => AppStateNotifier(),
+);
+
+// ── Convenience selectors ─────────────────────────────────────────────────────
+final activeObligationsProvider = Provider<List<ObligationModel>>((ref) {
+  final obs = ref.watch(appStateProvider).obligations;
+  return obs
+      .where((o) => o.status != 'completed')
+      .toList()
+      ..sort((a, b) {
+        final cmp = a.daysUntil.compareTo(b.daysUntil);
+        if (cmp != 0) return cmp;
+        const rw = {'high': 0, 'medium': 1, 'low': 2};
+        return (rw[a.risk] ?? 2).compareTo(rw[b.risk] ?? 2);
+      });
+});
+
+final isAuthenticatedProvider = Provider<bool>((ref) {
+  return ref.watch(appStateProvider).isAuthenticated;
+});
