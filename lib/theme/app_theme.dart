@@ -104,7 +104,7 @@ class AppTheme {
         color: AppColors.border,
         thickness: 1,
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.surfaceElevated,
         elevation: 0,
         shape: RoundedRectangleBorder(
