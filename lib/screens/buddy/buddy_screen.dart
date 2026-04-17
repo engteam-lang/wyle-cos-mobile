@@ -7,13 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:file_picker/file_picker.dart';
+
 import '../../models/chat_message_model.dart';
 import '../../models/obligation_model.dart';
 import '../../navigation/app_router.dart';
 import '../../providers/app_state.dart';
 import '../../services/ai_service.dart';
 import '../../services/voice_service.dart';
-import '../../constants/app_constants.dart';
 
 // ── Palette (local for Buddy screen dark theme) ───────────────────────────────
 const _bg         = Color(0xFF0D0D0D);
@@ -42,10 +43,11 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   final TextEditingController  _textCtrl    = TextEditingController();
   final ScrollController       _scrollCtrl  = ScrollController();
 
-  bool   _isRecording  = false;
-  bool   _isProcessing = false;
-  bool   _isSpeaking   = false;
-  String _partialText  = '';
+  bool           _isRecording  = false;
+  bool           _isProcessing = false;
+  bool           _isSpeaking   = false;
+  String         _partialText  = '';
+  PlatformFile?  _attachedFile;
 
   late AnimationController _waveCtrl;
 
@@ -138,12 +140,26 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
   // ── Send message ──────────────────────────────────────────────────────────────
   Future<void> _sendMessage(String text) async {
-    if (text.trim().isEmpty) return;
+    final file = _attachedFile;
+    final hasFile = file != null;
+    if (text.trim().isEmpty && !hasFile) return;
     _textCtrl.clear();
 
+    // What shows in the chat bubble
+    final displayText = text.trim().isNotEmpty
+        ? (hasFile ? '$text\n📎 ${file.name}' : text)
+        : '📎 ${file!.name}';
+
+    // What the AI receives — file name + extension hint so it can reason about it
+    final aiMessage = hasFile
+        ? '${text.trim().isNotEmpty ? text : 'I have uploaded a file.'}'
+          '\n\n[Attached: "${file.name}" (${(file.extension ?? 'file').toUpperCase()})]'
+        : text;
+
     setState(() {
-      _messages.add(ChatMessageModel.user(text));
+      _messages.add(ChatMessageModel.user(displayText));
       _isProcessing = true;
+      _attachedFile = null;
     });
     _scrollToBottom();
 
@@ -151,7 +167,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       final obligations = ref.read(activeObligationsProvider);
       final response = await AiService.instance.complete(
         systemPrompt: _buildSystemPrompt(obligations),
-        userMessage:  text,
+        userMessage:  aiMessage,
         maxTokens:    600,
       );
 
@@ -223,8 +239,8 @@ Currency: AED. Context: Dubai, UAE.''';
               children: [
                 _buildHeader(context),
                 Expanded(child: _buildMessageList()),
-                _buildQuickPrompts(),
                 _buildNowPlayingBar(),
+                _buildAttachmentPreview(),
                 _buildInputBar(),
               ],
             ),
@@ -437,33 +453,94 @@ Currency: AED. Context: Dubai, UAE.''';
     );
   }
 
-  // ── Quick prompts ─────────────────────────────────────────────────────────────
-  Widget _buildQuickPrompts() {
-    return SizedBox(
-      height: 40,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: AppConstants.buddyQuickPrompts.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (context, i) {
-          final prompt = AppConstants.buddyQuickPrompts[i];
-          return GestureDetector(
-            onTap: () => _sendMessage(prompt),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _border),
+  // ── File attachment ───────────────────────────────────────────────────────────
+  Future<void> _pickAttachment() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: false,
+        withData: false,
+      );
+      if (result != null && result.files.isNotEmpty && mounted) {
+        setState(() => _attachedFile = result.files.first);
+      }
+    } catch (_) {}
+  }
+
+  IconData _fileIcon(String? ext) {
+    switch (ext?.toLowerCase()) {
+      case 'jpg': case 'jpeg': case 'png': case 'gif': case 'webp': case 'heic':
+        return Icons.image_outlined;
+      case 'pdf':
+        return Icons.picture_as_pdf_outlined;
+      case 'doc': case 'docx':
+        return Icons.description_outlined;
+      case 'xls': case 'xlsx': case 'csv':
+        return Icons.table_chart_outlined;
+      case 'ppt': case 'pptx':
+        return Icons.slideshow_outlined;
+      default:
+        return Icons.attach_file_rounded;
+    }
+  }
+
+  // Slides up above the input bar when a file is attached
+  Widget _buildAttachmentPreview() {
+    final file = _attachedFile;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      height: file != null ? 50 : 0,
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        child: Container(
+          height: 50,
+          margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: _surfaceEl,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _verdigris.withOpacity(0.45)),
+          ),
+          child: Row(
+            children: [
+              Icon(_fileIcon(file?.extension),
+                  color: _verdigris, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  file?.name ?? '',
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: _white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
-              child: Text(prompt,
+              const SizedBox(width: 8),
+              Text(
+                (file?.extension ?? '').toUpperCase(),
                 style: GoogleFonts.inter(
-                    fontSize: 12, color: _textSec,
-                    fontWeight: FontWeight.w500)),
-            ),
-          );
-        },
+                    color: _textSec, fontSize: 10,
+                    fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => setState(() => _attachedFile = null),
+                child: Container(
+                  width: 20, height: 20,
+                  decoration: BoxDecoration(
+                    color: _border,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close_rounded,
+                      color: _textSec, size: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -584,7 +661,35 @@ Currency: AED. Context: Dubai, UAE.''';
       ),
       child: Row(
         children: [
-          // Text field
+          // ── Upload / attach button ──────────────────────────────────────────
+          GestureDetector(
+            onTap: _pickAttachment,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: _attachedFile != null
+                    ? _verdigris.withOpacity(0.18)
+                    : _surfaceEl,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: _attachedFile != null
+                      ? _verdigris.withOpacity(0.6)
+                      : _border,
+                ),
+              ),
+              child: Icon(
+                _attachedFile != null
+                    ? Icons.attach_file_rounded
+                    : Icons.add_rounded,
+                color: _attachedFile != null ? _verdigris : _textSec,
+                size: 20,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // ── Text field ──────────────────────────────────────────────────────
           Expanded(
             child: Container(
               decoration: BoxDecoration(
@@ -596,9 +701,10 @@ Currency: AED. Context: Dubai, UAE.''';
                 controller: _textCtrl,
                 style: GoogleFonts.inter(color: _white, fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'Ask Buddy anything…',
-                  hintStyle:
-                      GoogleFonts.inter(color: _textTer, fontSize: 14),
+                  hintText: _attachedFile != null
+                      ? 'Ask about this file…'
+                      : 'Ask Buddy anything…',
+                  hintStyle: GoogleFonts.inter(color: _textTer, fontSize: 14),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 12),
@@ -608,9 +714,9 @@ Currency: AED. Context: Dubai, UAE.''';
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
 
-          // Send button
+          // ── Send button ─────────────────────────────────────────────────────
           GestureDetector(
             onTap: () => _sendMessage(_textCtrl.text),
             child: Container(
@@ -624,13 +730,12 @@ Currency: AED. Context: Dubai, UAE.''';
           ),
           const SizedBox(width: 8),
 
-          // Mic button — tapping opens the full-screen recording overlay
-          // No scale animation here — prevents the input bar from jumping
+          // ── Mic button ──────────────────────────────────────────────────────
           GestureDetector(
             onTap: _toggleRecording,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              width: 52, height: 52,
+              width: 48, height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: _isRecording
@@ -644,7 +749,7 @@ Currency: AED. Context: Dubai, UAE.''';
               child: Icon(
                 _isRecording ? Icons.mic : Icons.mic_none_rounded,
                 color: _isRecording ? _white : _textSec,
-                size: 22,
+                size: 20,
               ),
             ),
           ),
