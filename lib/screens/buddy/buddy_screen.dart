@@ -417,7 +417,7 @@ Currency: AED. Context: Dubai, UAE.''';
           GestureDetector(
             onTap: () => showDialog(
               context: context,
-              builder: (_) => AlertDialog(
+              builder: (dialogCtx) => AlertDialog(
                 backgroundColor: _surfaceEl,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
@@ -429,13 +429,13 @@ Currency: AED. Context: Dubai, UAE.''';
                     style: GoogleFonts.inter(color: _textSec, fontSize: 13)),
                 actions: [
                   TextButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => Navigator.of(dialogCtx).pop(),
                     child: Text('Cancel',
                         style: GoogleFonts.inter(color: _textSec)),
                   ),
                   TextButton(
                     onPressed: () {
-                      Navigator.pop(context);
+                      Navigator.of(dialogCtx).pop();
                       _clearHistory();
                     },
                     child: Text('Clear',
