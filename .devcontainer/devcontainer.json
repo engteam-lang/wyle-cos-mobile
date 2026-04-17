@@ -1,0 +1,41 @@
+{
+  "name": "Wyle Flutter",
+  "image": "ghcr.io/cirruslabs/flutter:stable",
+
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "Dart-Code.flutter",
+        "Dart-Code.dart-code",
+        "usernamehw.errorlens",
+        "aaron-bond.better-comments",
+        "GitHub.copilot"
+      ],
+      "settings": {
+        "dart.flutterSdkPath": "/sdks/flutter",
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "Dart-Code.dart-code",
+        "[dart]": {
+          "editor.formatOnSave": true,
+          "editor.rulers": [100]
+        }
+      }
+    }
+  },
+
+  "postCreateCommand": "flutter pub get",
+
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": {
+      "label": "Flutter Web",
+      "onAutoForward": "openPreview"
+    }
+  },
+
+  "remoteUser": "root"
+}
