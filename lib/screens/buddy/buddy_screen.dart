@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:ui';
 
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:file_picker/file_picker.dart';
 
@@ -39,6 +41,12 @@ class BuddyScreen extends ConsumerStatefulWidget {
 class _BuddyScreenState extends ConsumerState<BuddyScreen>
     with TickerProviderStateMixin {
 
+  static const _kChatMessages = 'wyle_buddy_messages';
+  static const _kChatDate     = 'wyle_buddy_date';
+  static const _welcomeMsg =
+      "Hi! I'm Buddy, your AI chief of staff. I can help you manage your obligations, "
+      "check your calendar, and take care of tasks. What would you like to do today?";
+
   final List<ChatMessageModel> _messages    = [];
   final TextEditingController  _textCtrl    = TextEditingController();
   final ScrollController       _scrollCtrl  = ScrollController();
@@ -67,11 +75,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     _overlayAnim = CurvedAnimation(parent: _overlayCtrl, curve: Curves.easeOutCubic);
 
     VoiceService.instance.init();
-
-    _messages.add(ChatMessageModel.assistant(
-      "Hi! I'm Buddy, your AI chief of staff. I can help you manage your obligations, "
-      "check your calendar, and take care of tasks. What would you like to do today?",
-    ));
+    _loadHistory();
   }
 
   @override
@@ -82,6 +86,72 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     _scrollCtrl.dispose();
     VoiceService.instance.stopListening();
     super.dispose();
+  }
+
+  // ── Chat history persistence ──────────────────────────────────────────────────
+
+  /// Load today's messages from SharedPreferences.
+  /// If stored date differs from today, auto-clears old history.
+  Future<void> _loadHistory() async {
+    final prefs   = await SharedPreferences.getInstance();
+    final today   = DateTime.now().toIso8601String().substring(0, 10);
+    final stored  = prefs.getString(_kChatDate);
+
+    if (stored == today) {
+      final raw = prefs.getStringList(_kChatMessages) ?? [];
+      if (raw.isNotEmpty) {
+        final msgs = raw.map((s) {
+          final m = jsonDecode(s) as Map<String, dynamic>;
+          return ChatMessageModel(
+            id:        m['id'] as String,
+            role:      m['role'] as String,
+            content:   m['content'] as String,
+            timestamp: DateTime.parse(m['ts'] as String),
+          );
+        }).toList();
+        if (mounted) {
+          setState(() { _messages..clear()..addAll(msgs); });
+          _scrollToBottom();
+        }
+        return;
+      }
+    } else {
+      // New day — wipe old history
+      await prefs.remove(_kChatMessages);
+      await prefs.setString(_kChatDate, today);
+    }
+
+    // Fresh session: show welcome message
+    if (mounted) setState(() {
+      _messages.clear();
+      _messages.add(ChatMessageModel.assistant(_welcomeMsg));
+    });
+    _saveHistory();
+  }
+
+  Future<void> _saveHistory() async {
+    final prefs  = await SharedPreferences.getInstance();
+    final today  = DateTime.now().toIso8601String().substring(0, 10);
+    await prefs.setString(_kChatDate, today);
+    final raw = _messages.map((m) => jsonEncode({
+      'id':      m.id,
+      'role':    m.role,
+      'content': m.content,
+      'ts':      m.timestamp.toIso8601String(),
+    })).toList();
+    await prefs.setStringList(_kChatMessages, raw);
+  }
+
+  Future<void> _clearHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kChatMessages);
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    await prefs.setString(_kChatDate, today);
+    if (mounted) setState(() {
+      _messages.clear();
+      _messages.add(ChatMessageModel.assistant(_welcomeMsg));
+    });
+    _saveHistory();
   }
 
   // ── Recording ────────────────────────────────────────────────────────────────
@@ -187,16 +257,21 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         _messages.add(ChatMessageModel.assistant(response));
         _isProcessing = false;
       });
+      _saveHistory();
       _scrollToBottom();
 
       setState(() => _isSpeaking = true);
       await VoiceService.instance.speak(response);
       if (mounted) setState(() => _isSpeaking = false);
-    } catch (_) {
+    } catch (e) {
+      final errMsg = hasFile
+          ? "I couldn't analyse that file right now. "
+            "Image and PDF analysis requires Claude (credits needed) or Gemini (may be rate-limited). "
+            "For plain text files (.txt, .csv), Groq is used and works without credits. "
+            "Please try again in a moment."
+          : "Sorry, I couldn't process that right now. Please check your connection and try again.";
       setState(() {
-        _messages.add(ChatMessageModel.assistant(
-          "Sorry, I couldn't process that right now. Please check your connection and try again.",
-        ));
+        _messages.add(ChatMessageModel.assistant(errMsg));
         _isProcessing = false;
       });
     }
@@ -335,6 +410,51 @@ Currency: AED. Context: Dubai, UAE.''';
                   ],
                 ),
               ],
+            ),
+          ),
+
+          // Clear chat button
+          GestureDetector(
+            onTap: () => showDialog(
+              context: context,
+              builder: (_) => AlertDialog(
+                backgroundColor: _surfaceEl,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                title: Text('Clear chat?',
+                    style: GoogleFonts.poppins(
+                        color: _white, fontWeight: FontWeight.w600)),
+                content: Text(
+                    'This will remove all messages for today.',
+                    style: GoogleFonts.inter(color: _textSec, fontSize: 13)),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('Cancel',
+                        style: GoogleFonts.inter(color: _textSec)),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _clearHistory();
+                    },
+                    child: Text('Clear',
+                        style: GoogleFonts.inter(
+                            color: _crimson, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+            child: Container(
+              width: 38, height: 38,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                color: _surfaceEl,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _border),
+              ),
+              child: const Icon(Icons.delete_outline_rounded,
+                  color: _textSec, size: 18),
             ),
           ),
 
