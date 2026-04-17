@@ -115,14 +115,13 @@ class AiService {
         } catch (_) {}
       }
       if (_geminiKey.isNotEmpty) {
-        try {
-          return await _callGeminiWithFile(
-            systemPrompt: systemPrompt,
-            userMessage:  userMessage,
-            fileBytes:    fileBytes,
-            mimeType:     mimeType,
-          );
-        } catch (_) {}
+        // _callGeminiWithFile already retries once on 429
+        return await _callGeminiWithFile(
+          systemPrompt: systemPrompt,
+          userMessage:  userMessage,
+          fileBytes:    fileBytes,
+          mimeType:     mimeType,
+        );
       }
       throw Exception(
           'No vision-capable AI provider available. Add a Claude or Gemini API key.');
@@ -310,6 +309,7 @@ class AiService {
     required String    userMessage,
     required Uint8List fileBytes,
     required String    mimeType,
+    int attempt = 0,
   }) async {
     final b64 = base64Encode(fileBytes);
     final url =
@@ -334,6 +334,17 @@ class AiService {
         ],
       }),
     );
+    // 429 = rate limited — wait 3 s and retry once
+    if (response.statusCode == 429 && attempt == 0) {
+      await Future.delayed(const Duration(seconds: 3));
+      return _callGeminiWithFile(
+        systemPrompt: systemPrompt,
+        userMessage:  userMessage,
+        fileBytes:    fileBytes,
+        mimeType:     mimeType,
+        attempt:      1,
+      );
+    }
     if (response.statusCode != 200) {
       throw Exception('Gemini file API error: ${response.statusCode} ${response.body}');
     }
