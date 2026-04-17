@@ -79,16 +79,16 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
   Future<void> _logout() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         backgroundColor: _surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text('Sign Out', style: GoogleFonts.poppins(color: _white)),
         content: Text('Are you sure you want to sign out?',
             style: GoogleFonts.inter(color: _textSec)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false),
+          TextButton(onPressed: () => Navigator.of(dialogCtx).pop(false),
               child: Text('Cancel', style: TextStyle(color: _textSec))),
-          TextButton(onPressed: () => Navigator.pop(context, true),
+          TextButton(onPressed: () => Navigator.of(dialogCtx).pop(true),
               child: Text('Sign Out', style: TextStyle(color: _crimson))),
         ],
       ),
