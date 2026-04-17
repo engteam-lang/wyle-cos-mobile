@@ -22,7 +22,7 @@ dependencies:
 
   # Storage
   shared_preferences: ^2.3.2
-  flutter_secure_storage: ^9.2.2
+  flutter_secure_storage: ^10.0.0
 
   # Auth
   google_sign_in: ^6.2.1
@@ -33,7 +33,7 @@ dependencies:
 
   # Voice / Audio
   record: ^5.1.2
-  speech_to_text: ^6.6.2
+  speech_to_text: ^7.3.0
   flutter_tts: ^4.0.2
   just_audio: ^0.9.41
 
