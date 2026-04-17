@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class GoogleAuthResult {
@@ -18,7 +20,14 @@ class GoogleAuthService {
   GoogleAuthService._();
   static final GoogleAuthService instance = GoogleAuthService._();
 
-  final GoogleSignIn _googleSignIn = GoogleSignIn(
+  // Lazy so it's created after dotenv loads.
+  // On web, clientId must be passed explicitly (no google-services.json).
+  late final GoogleSignIn _googleSignIn = GoogleSignIn(
+    clientId: kIsWeb
+        ? (dotenv.env['EXPO_PUBLIC_GOOGLE_CLIENT_ID']?.isNotEmpty == true
+            ? dotenv.env['EXPO_PUBLIC_GOOGLE_CLIENT_ID']
+            : null)
+        : null,
     scopes: [
       'email',
       'profile',
