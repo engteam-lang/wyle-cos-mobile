@@ -39,6 +39,7 @@ class WyleApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // routerProvider creates GoRouter exactly once — read is sufficient.
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(

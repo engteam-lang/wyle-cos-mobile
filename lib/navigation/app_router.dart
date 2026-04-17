@@ -45,19 +45,38 @@ class AppRoutes {
   static const settings       = '/settings';
 }
 
+// ── Auth change notifier ──────────────────────────────────────────────────────
+// Bridges Riverpod state changes → GoRouter's refreshListenable.
+// GoRouter is created ONCE; this notifier tells it to re-run redirect guards
+// whenever auth state changes — without recreating the router itself.
+class _AuthChangeNotifier extends ChangeNotifier {
+  void notify() => notifyListeners();
+}
+
 // ── Router provider ───────────────────────────────────────────────────────────
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(appStateProvider);
+  final notifier = _AuthChangeNotifier();
+
+  // ref.listen → calls callback on change but does NOT rebuild this Provider,
+  // so GoRouter is created exactly once for the lifetime of the app.
+  ref.listen<AppState>(appStateProvider, (_, __) => notifier.notify());
+
+  // Clean up the ChangeNotifier when the provider is disposed.
+  ref.onDispose(notifier.dispose);
 
   return GoRouter(
     initialLocation: AppRoutes.splash,
+    // refreshListenable triggers redirect re-evaluation without recreation.
+    refreshListenable: notifier,
     redirect: (context, state) {
-      final isAuth = authState.isAuthenticated;
+      // Use ref.read — we only need the current snapshot, not a subscription.
+      final authState = ref.read(appStateProvider);
+      final isAuth    = authState.isAuthenticated;
       final onboarded = authState.user?.onboardingComplete ?? false;
-      final loc = state.matchedLocation;
+      final loc       = state.matchedLocation;
 
       // Onboarding routes — always accessible when not authed
-      final onboardingRoutes = {
+      const onboardingRoutes = {
         AppRoutes.splash, AppRoutes.welcome, AppRoutes.login,
         AppRoutes.preferences, AppRoutes.obligationScan,
         AppRoutes.ready, AppRoutes.preparation,
@@ -88,13 +107,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: AppRoutes.ready,          builder: (_, __) => const ReadyScreen()),
       GoRoute(path: AppRoutes.preparation,    builder: (_, __) => const PreparationScreen()),
 
-      // ── /main redirect → /main/home ───────────────────────────────────────────
+      // ── /main redirect → /main/home ──────────────────────────────────────────
       GoRoute(
         path: AppRoutes.main,
         redirect: (_, __) => AppRoutes.home,
       ),
 
-      // ── Main shell (bottom tabs) ────────────────────────────────────────────
+      // ── Main shell (bottom tabs) ─────────────────────────────────────────────
       ShellRoute(
         builder: (context, state, child) => MainScreen(child: child),
         routes: [
@@ -107,7 +126,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
 
-      // ── Modal / full-screen routes ──────────────────────────────────────────
+      // ── Modal / full-screen routes ───────────────────────────────────────────
       GoRoute(
         path: AppRoutes.brainDump,
         pageBuilder: (context, state) => const MaterialPage(
