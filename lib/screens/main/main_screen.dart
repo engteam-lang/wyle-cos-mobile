@@ -29,13 +29,18 @@ class MainScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final activeIndex = _currentIndex(context);
 
+    // Hide tab bar on Buddy screen — it shows its own immersive header + back btn
+    final showTabBar = activeIndex != 2;
+
     return Scaffold(
       backgroundColor: AppColors.bgDark,
       body: child,
-      bottomNavigationBar: _WyleTabBar(
-        activeIndex: activeIndex,
-        onTab: (index) => context.go(_tabs[index].route),
-      ),
+      bottomNavigationBar: showTabBar
+          ? _WyleTabBar(
+              activeIndex: activeIndex,
+              onTab: (index) => context.go(_tabs[index].route),
+            )
+          : null,
     );
   }
 }

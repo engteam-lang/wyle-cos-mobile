@@ -3,6 +3,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 
 typedef TranscriptCallback = void Function(String text);
 typedef StateCallback      = void Function(String state);
+typedef PartialCallback    = void Function(String partial);
 
 /// Voice recording and text-to-speech service
 class VoiceService {
@@ -22,14 +23,21 @@ class VoiceService {
 
     await _tts.setLanguage('en-US');
     await _tts.setPitch(1.0);
-    await _tts.setSpeechRate(0.5);
+    await _tts.setSpeechRate(0.65); // Faster — was 0.5
   }
 
   bool get isListening => _isListening;
   bool get isAvailable => _speechAvailable;
 
-  /// Start speech recognition
-  Future<void> startListening(TranscriptCallback onResult, StateCallback onState) async {
+  /// Start speech recognition.
+  /// [onPartial] receives live partial words as the user speaks.
+  /// Auto-stops after [silenceTimeout] of silence (default 3 s).
+  Future<void> startListening(
+    TranscriptCallback onResult,
+    StateCallback onState, {
+    PartialCallback? onPartial,
+    Duration silenceTimeout = const Duration(seconds: 3),
+  }) async {
     if (!_speechAvailable) {
       final ok = await _speech.initialize();
       if (!ok) {
@@ -48,11 +56,15 @@ class VoiceService {
           _isListening = false;
           onState('idle');
           onResult(result.recognizedWords);
+        } else if (onPartial != null) {
+          // Live words while user is still speaking
+          onPartial(result.recognizedWords);
         }
       },
-      listenMode: ListenMode.confirmation,
-      cancelOnError: true,
-      partialResults: false,
+      listenMode:     ListenMode.dictation,
+      cancelOnError:  true,
+      partialResults: true,
+      pauseFor:       silenceTimeout, // auto-stop after N seconds of silence
     );
   }
 
@@ -72,5 +84,5 @@ class VoiceService {
     await _tts.stop();
   }
 
-  bool get isSpeaking => false; // overridden by TTS state if needed
+  bool get isSpeaking => false;
 }
