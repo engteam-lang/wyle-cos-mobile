@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -11,6 +12,18 @@ class AiService {
   static String get _anthropicKey => dotenv.env['EXPO_PUBLIC_ANTHROPIC_API_KEY'] ?? '';
   static String get _groqKey      => dotenv.env['EXPO_PUBLIC_GROQ_API_KEY']      ?? '';
   static String get _geminiKey    => dotenv.env['EXPO_PUBLIC_GEMINI_API_KEY']    ?? '';
+
+  /// On web the browser blocks direct calls to Claude/Groq (CORS).
+  /// Run `dart run server/proxy.dart` in your Codespace and set
+  /// PROXY_URL=https://<codespace>-8081.app.github.dev in .env.
+  /// On native (iOS/Android) this value is ignored — APIs are called directly.
+  static String get _proxyUrl =>
+      dotenv.env['PROXY_URL'] ?? 'http://localhost:8081';
+
+  /// Returns the correct URL for a given AI endpoint.
+  /// On web, routes through the local proxy to avoid CORS errors.
+  static String _url(String directUrl, String proxyPath) =>
+      kIsWeb ? '$_proxyUrl$proxyPath' : directUrl;
 
   // ── Text-only completion ─────────────────────────────────────────────────────
 
@@ -128,7 +141,7 @@ class AiService {
     required int    maxTokens,
   }) async {
     final response = await http.post(
-      Uri.parse('https://api.anthropic.com/v1/messages'),
+      Uri.parse(_url('https://api.anthropic.com/v1/messages', '/claude')),
       headers: {
         'Content-Type':     'application/json',
         'x-api-key':         _anthropicKey,
@@ -184,7 +197,7 @@ class AiService {
           };
 
     final response = await http.post(
-      Uri.parse('https://api.anthropic.com/v1/messages'),
+      Uri.parse(_url('https://api.anthropic.com/v1/messages', '/claude')),
       headers: {
         'Content-Type':     'application/json',
         'x-api-key':         _anthropicKey,
@@ -223,7 +236,7 @@ class AiService {
     required int    maxTokens,
   }) async {
     final response = await http.post(
-      Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
+      Uri.parse(_url('https://api.groq.com/openai/v1/chat/completions', '/groq')),
       headers: {
         'Content-Type':  'application/json',
         'Authorization': 'Bearer $_groqKey',
@@ -246,9 +259,19 @@ class AiService {
 
   // ── Gemini (text) ────────────────────────────────────────────────────────────
 
+  /// Calls Gemini directly (supports browser CORS natively).
+  /// Retries once after 3 s on 429 (free-tier rate limit).
   Future<String> _callGemini({
     required String systemPrompt,
     required String userMessage,
+  }) async {
+    return _callGeminiRaw(systemPrompt: systemPrompt, userMessage: userMessage);
+  }
+
+  Future<String> _callGeminiRaw({
+    required String systemPrompt,
+    required String userMessage,
+    int attempt = 0,
   }) async {
     final url =
         'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$_geminiKey';
@@ -265,6 +288,12 @@ class AiService {
         ],
       }),
     );
+    // 429 = rate limited — wait 3 s and retry once
+    if (response.statusCode == 429 && attempt == 0) {
+      await Future.delayed(const Duration(seconds: 3));
+      return _callGeminiRaw(
+          systemPrompt: systemPrompt, userMessage: userMessage, attempt: 1);
+    }
     if (response.statusCode != 200) {
       throw Exception('Gemini API error: ${response.statusCode}');
     }
