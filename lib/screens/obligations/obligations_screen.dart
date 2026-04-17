@@ -69,9 +69,10 @@ bool _isSimilarTitle(String a, String b) {
 
 ObligationModel? _findDuplicate(ObligationModel item, List<ObligationModel> existing) {
   for (final e in existing) {
-    if (e.status == 'active' && e.type == item.type && _isSimilarTitle(e.title, item.title)) {
-      return e;
-    }
+    // Skip completed items and the item itself
+    if (e.status != 'active' || e.id == item.id) continue;
+    // Title-only match (no type constraint) so AI-assigned type differences don't hide dupes
+    if (_isSimilarTitle(e.title, item.title)) return e;
   }
   return null;
 }
@@ -185,14 +186,16 @@ class _ObligationsScreenState extends ConsumerState<ObligationsScreen> {
   }
 
   void _showAddModal() {
+    final allObs = ref.read(appStateProvider).obligations;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _AddModal(
+      builder: (sheetCtx) => _AddModal(
+        existingObligations: allObs,
         onAdd: (ob) {
           ref.read(appStateProvider.notifier).addObligation(ob);
-          Navigator.of(context).pop();
+          Navigator.of(sheetCtx).pop();
         },
       ),
     );
@@ -1318,7 +1321,8 @@ class _DetailModal extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 class _AddModal extends StatefulWidget {
   final void Function(ObligationModel) onAdd;
-  const _AddModal({required this.onAdd});
+  final List<ObligationModel> existingObligations;
+  const _AddModal({required this.onAdd, required this.existingObligations});
 
   @override
   State<_AddModal> createState() => _AddModalState();
@@ -1343,7 +1347,7 @@ class _AddModalState extends State<_AddModal> {
 
   void _submit() {
     if (_titleCtrl.text.trim().isEmpty) return;
-    widget.onAdd(ObligationModel(
+    final newOb = ObligationModel(
       id:            DateTime.now().millisecondsSinceEpoch.toString(),
       emoji:         emojiForType(_type),
       title:         _titleCtrl.text.trim(),
@@ -1357,7 +1361,44 @@ class _AddModalState extends State<_AddModal> {
           : 'Handle manually',
       notes:         _notesCtrl.text.trim().isNotEmpty ? _notesCtrl.text.trim() : null,
       source:        'manual',
-    ));
+    );
+
+    // Duplicate check before saving
+    final dupe = _findDuplicate(newOb, widget.existingObligations);
+    if (dupe != null) {
+      showDialog(
+        context: context,
+        builder: (dialogCtx) => AlertDialog(
+          backgroundColor: _surfaceEl,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Duplicate detected',
+              style: GoogleFonts.poppins(
+                  color: _white, fontWeight: FontWeight.w600, fontSize: 16)),
+          content: Text(
+            '"${dupe.title}" already exists as an active obligation.\n\nAdd it anyway?',
+            style: GoogleFonts.inter(color: _textSec, fontSize: 13, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: Text('Cancel', style: GoogleFonts.inter(color: _textSec)),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogCtx).pop();
+                widget.onAdd(newOb);
+              },
+              child: Text('Add Anyway',
+                  style: GoogleFonts.inter(
+                      color: _orange, fontWeight: FontWeight.w600)),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    widget.onAdd(newOb);
   }
 
   @override
