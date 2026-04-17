@@ -235,19 +235,75 @@ Currency: AED. Context: Dubai, UAE.''';
               ],
             ),
 
-            // ── Voice recording overlay (slides in on top) ────────────────────
+            // ── Voice recording overlay (fades in on top — no scale to avoid jitter)
             if (_isRecording)
               FadeTransition(
                 opacity: _overlayAnim,
-                child: ScaleTransition(
-                  scale: Tween<double>(begin: 0.96, end: 1.0)
-                      .animate(_overlayAnim),
-                  child: _VoiceRecordingOverlay(
-                    partialText: _partialText,
-                    onStop: _stopRecording,
+                child: _VoiceRecordingOverlay(
+                  partialText: _partialText,
+                  onStop: _stopRecording,
+                ),
+              ),
+
+            // ── TTS stop button (floats above input when Buddy is speaking) ────
+            AnimatedOpacity(
+              opacity: _isSpeaking ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              child: IgnorePointer(
+                ignoring: !_isSpeaking,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    // Sits just above the quick-prompts bar
+                    padding: const EdgeInsets.only(bottom: 130),
+                    child: GestureDetector(
+                      onTap: () async {
+                        await VoiceService.instance.stopSpeaking();
+                        if (mounted) setState(() => _isSpeaking = false);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 22, vertical: 11),
+                        decoration: BoxDecoration(
+                          color: _surfaceEl,
+                          borderRadius: BorderRadius.circular(32),
+                          border: Border.all(
+                              color: _verdigris.withOpacity(0.55), width: 1),
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black.withOpacity(0.45),
+                                blurRadius: 16,
+                                offset: const Offset(0, 4)),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 28, height: 28,
+                              decoration: BoxDecoration(
+                                color: _verdigris.withOpacity(0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.stop_rounded,
+                                  color: _verdigris, size: 16),
+                            ),
+                            const SizedBox(width: 10),
+                            Text('Stop reading',
+                              style: GoogleFonts.inter(
+                                color: _white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              )),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
+            ),
           ],
         ),
       ),
@@ -529,30 +585,26 @@ Currency: AED. Context: Dubai, UAE.''';
           const SizedBox(width: 8),
 
           // Mic button — tapping opens the full-screen recording overlay
+          // No scale animation here — prevents the input bar from jumping
           GestureDetector(
             onTap: _toggleRecording,
-            child: AnimatedBuilder(
-              animation: _pulseCtrl,
-              builder: (_, __) => Transform.scale(
-                scale: _isRecording ? _pulse.value : 1.0,
-                child: Container(
-                  width: 52, height: 52,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _isRecording
-                        ? _crimson.withOpacity(0.9)
-                        : const Color(0xFF252525),
-                    boxShadow: _isRecording
-                        ? [BoxShadow(color: _crimson.withOpacity(0.4),
-                              blurRadius: 16, spreadRadius: 2)]
-                        : null,
-                  ),
-                  child: Icon(
-                    _isRecording ? Icons.mic : Icons.mic_none_rounded,
-                    color: _isRecording ? _white : _textSec,
-                    size: 22,
-                  ),
-                ),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 52, height: 52,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _isRecording
+                    ? _crimson.withOpacity(0.9)
+                    : const Color(0xFF252525),
+                boxShadow: _isRecording
+                    ? [BoxShadow(color: _crimson.withOpacity(0.35),
+                            blurRadius: 14, spreadRadius: 1)]
+                    : null,
+              ),
+              child: Icon(
+                _isRecording ? Icons.mic : Icons.mic_none_rounded,
+                color: _isRecording ? _white : _textSec,
+                size: 22,
               ),
             ),
           ),
@@ -586,9 +638,8 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
   // Ripple rings expanding outward
   late AnimationController _rippleCtrl;
 
-  // Center orb gentle breathe
+  // Glow halo pulse (opacity only — no scale to prevent visual jitter)
   late AnimationController _orbCtrl;
-  late Animation<double>   _orbScale;
 
   // Waveform bar heights — randomised via timer
   List<double> _barHeights = List.filled(9, 8.0);
@@ -609,12 +660,10 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
         vsync: this, duration: const Duration(milliseconds: 2400))
       ..repeat();
 
-    // Orb breathe
+    // Glow halo — opacity only, no scale
     _orbCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1200))
+        vsync: this, duration: const Duration(milliseconds: 1400))
       ..repeat(reverse: true);
-    _orbScale = Tween<double>(begin: 1.0, end: 1.09)
-        .animate(CurvedAnimation(parent: _orbCtrl, curve: Curves.easeInOut));
 
     // Waveform randomisation every 180 ms → AnimatedContainer smoothes it
     _waveTimer = Timer.periodic(const Duration(milliseconds: 180), (_) {
@@ -709,12 +758,8 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
                     ),
                   ),
 
-                  // Center orb
-                  AnimatedBuilder(
-                    animation: _orbCtrl,
-                    builder: (_, __) => Transform.scale(
-                      scale: _orbScale.value,
-                      child: Container(
+                  // Center orb — static size, no scale (prevents screen jitter)
+                  Container(
                         width: 96, height: 96,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
@@ -736,8 +781,6 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
                         ),
                         child: const Icon(Icons.mic_rounded,
                             color: Colors.white, size: 40),
-                      ),
-                    ),
                   ),
                 ],
               ),
