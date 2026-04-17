@@ -48,8 +48,6 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   String _partialText  = '';
 
   late AnimationController _waveCtrl;
-  late AnimationController _pulseCtrl;
-  late Animation<double>   _pulse;
 
   // Entry animation for the overlay
   late AnimationController _overlayCtrl;
@@ -59,12 +57,8 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   void initState() {
     super.initState();
 
-    _waveCtrl  = AnimationController(vsync: this,
+    _waveCtrl = AnimationController(vsync: this,
         duration: const Duration(milliseconds: 600))..repeat(reverse: true);
-    _pulseCtrl = AnimationController(vsync: this,
-        duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
-    _pulse     = Tween<double>(begin: 1.0, end: 1.12)
-        .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
 
     _overlayCtrl = AnimationController(vsync: this,
         duration: const Duration(milliseconds: 380));
@@ -81,7 +75,6 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   @override
   void dispose() {
     _waveCtrl.dispose();
-    _pulseCtrl.dispose();
     _overlayCtrl.dispose();
     _textCtrl.dispose();
     _scrollCtrl.dispose();
@@ -319,29 +312,27 @@ Currency: AED. Context: Dubai, UAE.''';
       ),
       child: Row(
         children: [
-          // Buddy orb avatar
-          AnimatedBuilder(
-            animation: _pulseCtrl,
-            builder: (_, __) => Transform.scale(
-              scale: _isSpeaking ? _pulse.value : 1.0,
-              child: Container(
-                width: 46, height: 46,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF1B998B), Color(0xFFD5FF3F)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  boxShadow: [
-                    BoxShadow(color: _verdigris.withOpacity(0.4),
-                        blurRadius: 12, spreadRadius: 1),
-                  ],
-                ),
-                child: const Center(
-                  child: Text('◎', style: TextStyle(fontSize: 20, color: _white)),
-                ),
+          // Buddy orb avatar — static, no scale animation
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: 46, height: 46,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1B998B), Color(0xFFD5FF3F)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: _verdigris.withOpacity(_isSpeaking ? 0.75 : 0.35),
+                  blurRadius: _isSpeaking ? 20 : 10,
+                  spreadRadius: _isSpeaking ? 3 : 1,
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Text('◎', style: TextStyle(fontSize: 20, color: _white)),
             ),
           ),
 
@@ -728,9 +719,12 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
 
               const Spacer(),
 
-              // ── Ripple orb ──────────────────────────────────────────────────
-              Stack(
+              // ── Ripple orb — fixed 260×260 box so expanding rings never shift layout
+              SizedBox(
+                width: 260, height: 260,
+                child: Stack(
                 alignment: Alignment.center,
+                clipBehavior: Clip.none,
                 children: [
                   // Outer ring (lowest opacity, widest spread)
                   _rippleRing(0.66, 100, 0.20, 1.0),
@@ -760,29 +754,30 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
 
                   // Center orb — static size, no scale (prevents screen jitter)
                   Container(
-                        width: 96, height: 96,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              const Color(0xFF22BBA8),
-                              _verdigris,
-                              const Color(0xFF0A4A44),
-                              const Color(0xFF041A18),
-                            ],
-                            stops: const [0.0, 0.35, 0.72, 1.0],
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                                color: _verdigris.withOpacity(0.55),
-                                blurRadius: 28,
-                                spreadRadius: 4),
-                          ],
-                        ),
-                        child: const Icon(Icons.mic_rounded,
-                            color: Colors.white, size: 40),
+                    width: 96, height: 96,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          const Color(0xFF22BBA8),
+                          _verdigris,
+                          const Color(0xFF0A4A44),
+                          const Color(0xFF041A18),
+                        ],
+                        stops: const [0.0, 0.35, 0.72, 1.0],
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                            color: _verdigris.withOpacity(0.55),
+                            blurRadius: 28,
+                            spreadRadius: 4),
+                      ],
+                    ),
+                    child: const Icon(Icons.mic_rounded,
+                        color: Colors.white, size: 40),
                   ),
                 ],
+              ),
               ),
 
               const Spacer(),
@@ -821,35 +816,37 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
               const SizedBox(height: 36),
 
               // ── Live partial transcript ─────────────────────────────────────
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                switchInCurve: Curves.easeOut,
-                child: widget.partialText.isNotEmpty
-                    ? Container(
-                        key: ValueKey(widget.partialText),
-                        margin: const EdgeInsets.symmetric(horizontal: 40),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                              color: Colors.white.withOpacity(0.08)),
-                        ),
-                        child: Text(
-                          '"${widget.partialText}"',
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            color: Colors.white.withOpacity(0.88),
-                            fontSize: 15,
-                            fontStyle: FontStyle.italic,
-                            height: 1.55,
-                          ),
-                        ),
-                      )
-                    : const SizedBox(key: ValueKey('empty'), height: 52),
+              // Fixed-height container — text updates in-place, zero layout shift
+              SizedBox(
+                height: 56,
+                child: AnimatedOpacity(
+                  opacity: widget.partialText.isNotEmpty ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 40),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white.withOpacity(0.08)),
+                    ),
+                    child: Text(
+                      widget.partialText.isNotEmpty
+                          ? '"${widget.partialText}"'
+                          : '',
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        color: Colors.white.withOpacity(0.88),
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
               ),
 
               const SizedBox(height: 24),

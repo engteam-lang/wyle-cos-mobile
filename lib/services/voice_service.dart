@@ -23,7 +23,7 @@ class VoiceService {
 
     await _tts.setLanguage('en-US');
     await _tts.setPitch(1.0);
-    await _tts.setSpeechRate(0.65); // Faster — was 0.5
+    await _tts.setSpeechRate(0.85); // Fast — natural but brisk
   }
 
   bool get isListening => _isListening;
