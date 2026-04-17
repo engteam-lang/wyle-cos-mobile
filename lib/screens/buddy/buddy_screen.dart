@@ -165,11 +165,23 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
     try {
       final obligations = ref.read(activeObligationsProvider);
-      final response = await AiService.instance.complete(
-        systemPrompt: _buildSystemPrompt(obligations),
-        userMessage:  aiMessage,
-        maxTokens:    600,
-      );
+      // If the file has bytes, use the vision/document API; otherwise text-only
+      final String response;
+      if (file?.bytes != null) {
+        response = await AiService.instance.completeWithFile(
+          systemPrompt: _buildSystemPrompt(obligations),
+          userMessage:  aiMessage,
+          fileBytes:    file!.bytes!,
+          mimeType:     _mimeType(file.extension),
+          maxTokens:    1500,
+        );
+      } else {
+        response = await AiService.instance.complete(
+          systemPrompt: _buildSystemPrompt(obligations),
+          userMessage:  aiMessage,
+          maxTokens:    600,
+        );
+      }
 
       setState(() {
         _messages.add(ChatMessageModel.assistant(response));
@@ -459,12 +471,27 @@ Currency: AED. Context: Dubai, UAE.''';
       final result = await FilePicker.platform.pickFiles(
         type: FileType.any,
         allowMultiple: false,
-        withData: false,
+        withData: true, // read bytes so the AI can actually see the content
       );
       if (result != null && result.files.isNotEmpty && mounted) {
         setState(() => _attachedFile = result.files.first);
       }
     } catch (_) {}
+  }
+
+  /// Returns the MIME type for a given file extension.
+  String _mimeType(String? ext) {
+    switch (ext?.toLowerCase()) {
+      case 'jpg': case 'jpeg': return 'image/jpeg';
+      case 'png':              return 'image/png';
+      case 'gif':              return 'image/gif';
+      case 'webp':             return 'image/webp';
+      case 'heic':             return 'image/heic';
+      case 'pdf':              return 'application/pdf';
+      case 'txt': case 'md':   return 'text/plain';
+      case 'csv':              return 'text/csv';
+      default:                 return 'application/octet-stream';
+    }
   }
 
   IconData _fileIcon(String? ext) {

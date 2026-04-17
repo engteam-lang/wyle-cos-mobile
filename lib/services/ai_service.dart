@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -11,14 +12,15 @@ class AiService {
   static String get _groqKey      => dotenv.env['EXPO_PUBLIC_GROQ_API_KEY']      ?? '';
   static String get _geminiKey    => dotenv.env['EXPO_PUBLIC_GEMINI_API_KEY']    ?? '';
 
-  /// Call Claude with a system prompt and user message. Falls back to Groq, then Gemini.
+  // ── Text-only completion ─────────────────────────────────────────────────────
+
+  /// Claude → Groq → Gemini fallback for plain text conversation.
   Future<String> complete({
     required String systemPrompt,
     required String userMessage,
-    String model = 'claude-opus-4-6',
-    int maxTokens = 1024,
+    String model    = 'claude-opus-4-6',
+    int    maxTokens = 1024,
   }) async {
-    // Try Claude first
     if (_anthropicKey.isNotEmpty) {
       try {
         return await _callClaude(
@@ -29,8 +31,6 @@ class AiService {
         );
       } catch (_) {}
     }
-
-    // Fallback: Groq
     if (_groqKey.isNotEmpty) {
       try {
         return await _callGroq(
@@ -40,8 +40,6 @@ class AiService {
         );
       } catch (_) {}
     }
-
-    // Fallback: Gemini
     if (_geminiKey.isNotEmpty) {
       try {
         return await _callGemini(
@@ -50,22 +48,91 @@ class AiService {
         );
       } catch (_) {}
     }
-
     throw Exception('All AI providers unavailable. Please check your API keys.');
   }
+
+  // ── File-aware completion ────────────────────────────────────────────────────
+
+  /// Send a file (image / PDF / plain-text) alongside a message.
+  ///
+  /// Supported MIME types that get passed as binary:
+  ///   image/*          → Claude vision / Gemini vision
+  ///   application/pdf  → Claude document API / Gemini inline
+  ///
+  /// Plain-text files (text/*, csv, md …) are decoded and sent inline so
+  /// Groq can also participate in the fallback chain.
+  Future<String> completeWithFile({
+    required String    systemPrompt,
+    required String    userMessage,
+    required Uint8List fileBytes,
+    required String    mimeType,
+    String model    = 'claude-opus-4-6',
+    int    maxTokens = 1500,
+  }) async {
+    final isImage   = mimeType.startsWith('image/');
+    final isPdf     = mimeType == 'application/pdf';
+    final isText    = mimeType.startsWith('text/');
+
+    // Plain-text files: decode and append inline → all three providers work
+    if (isText) {
+      final textContent = utf8.decode(fileBytes, allowMalformed: true);
+      final combined = '$userMessage\n\n--- File contents ---\n$textContent';
+      return complete(
+        systemPrompt: systemPrompt,
+        userMessage:  combined,
+        model:        model,
+        maxTokens:    maxTokens,
+      );
+    }
+
+    // Binary files (image / PDF): Claude first, Gemini as fallback
+    if (isImage || isPdf) {
+      if (_anthropicKey.isNotEmpty) {
+        try {
+          return await _callClaudeWithFile(
+            systemPrompt: systemPrompt,
+            userMessage:  userMessage,
+            fileBytes:    fileBytes,
+            mimeType:     mimeType,
+            model:        model,
+            maxTokens:    maxTokens,
+          );
+        } catch (_) {}
+      }
+      if (_geminiKey.isNotEmpty) {
+        try {
+          return await _callGeminiWithFile(
+            systemPrompt: systemPrompt,
+            userMessage:  userMessage,
+            fileBytes:    fileBytes,
+            mimeType:     mimeType,
+          );
+        } catch (_) {}
+      }
+      throw Exception(
+          'No vision-capable AI provider available. Add a Claude or Gemini API key.');
+    }
+
+    // Unsupported binary format — tell the user gracefully
+    return "I can read images and PDFs directly. For other file types "
+        "(Word, Excel, PowerPoint), please copy and paste the text content "
+        "into the chat and I'll analyse it for you.";
+  }
+
+  // ── Claude (text) ────────────────────────────────────────────────────────────
 
   Future<String> _callClaude({
     required String systemPrompt,
     required String userMessage,
     required String model,
-    required int maxTokens,
+    required int    maxTokens,
   }) async {
     final response = await http.post(
       Uri.parse('https://api.anthropic.com/v1/messages'),
       headers: {
-        'Content-Type':      'application/json',
-        'x-api-key':          _anthropicKey,
-        'anthropic-version':  '2023-06-01',
+        'Content-Type':     'application/json',
+        'x-api-key':         _anthropicKey,
+        'anthropic-version': '2023-06-01',
       },
       body: jsonEncode({
         'model':      model,
@@ -76,20 +143,84 @@ class AiService {
         ],
       }),
     );
-
     if (response.statusCode != 200) {
       throw Exception('Claude API error: ${response.statusCode}');
     }
-
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data    = jsonDecode(response.body) as Map<String, dynamic>;
     final content = data['content'] as List;
     return (content.first as Map<String, dynamic>)['text'] as String;
   }
 
+  // ── Claude (image / PDF) ─────────────────────────────────────────────────────
+
+  Future<String> _callClaudeWithFile({
+    required String    systemPrompt,
+    required String    userMessage,
+    required Uint8List fileBytes,
+    required String    mimeType,
+    required String    model,
+    required int       maxTokens,
+  }) async {
+    final b64 = base64Encode(fileBytes);
+
+    // Build the multimodal content block
+    final Map<String, dynamic> fileBlock = mimeType.startsWith('image/')
+        ? {
+            'type': 'image',
+            'source': {
+              'type':       'base64',
+              'media_type': mimeType,
+              'data':        b64,
+            },
+          }
+        : {
+            // PDF — requires anthropic-beta header
+            'type': 'document',
+            'source': {
+              'type':       'base64',
+              'media_type': 'application/pdf',
+              'data':        b64,
+            },
+          };
+
+    final response = await http.post(
+      Uri.parse('https://api.anthropic.com/v1/messages'),
+      headers: {
+        'Content-Type':     'application/json',
+        'x-api-key':         _anthropicKey,
+        'anthropic-version': '2023-06-01',
+        // PDF support beta header (ignored for image requests)
+        'anthropic-beta':    'pdfs-2024-09-25',
+      },
+      body: jsonEncode({
+        'model':      model,
+        'max_tokens': maxTokens,
+        'system':     systemPrompt,
+        'messages': [
+          {
+            'role': 'user',
+            'content': [
+              fileBlock,
+              {'type': 'text', 'text': userMessage},
+            ],
+          },
+        ],
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Claude file API error: ${response.statusCode} ${response.body}');
+    }
+    final data    = jsonDecode(response.body) as Map<String, dynamic>;
+    final content = data['content'] as List;
+    return (content.first as Map<String, dynamic>)['text'] as String;
+  }
+
+  // ── Groq (text only) ─────────────────────────────────────────────────────────
+
   Future<String> _callGroq({
     required String systemPrompt,
     required String userMessage,
-    required int maxTokens,
+    required int    maxTokens,
   }) async {
     final response = await http.post(
       Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
@@ -106,20 +237,21 @@ class AiService {
         ],
       }),
     );
-
     if (response.statusCode != 200) {
       throw Exception('Groq API error: ${response.statusCode}');
     }
-
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return data['choices'][0]['message']['content'] as String;
   }
+
+  // ── Gemini (text) ────────────────────────────────────────────────────────────
 
   Future<String> _callGemini({
     required String systemPrompt,
     required String userMessage,
   }) async {
-    final url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$_geminiKey';
+    final url =
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$_geminiKey';
     final response = await http.post(
       Uri.parse(url),
       headers: {'Content-Type': 'application/json'},
@@ -133,44 +265,68 @@ class AiService {
         ],
       }),
     );
-
     if (response.statusCode != 200) {
       throw Exception('Gemini API error: ${response.statusCode}');
     }
-
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     return data['candidates'][0]['content']['parts'][0]['text'] as String;
   }
 
-  /// Parse JSON from AI response — strips markdown code fences if present
-  static Map<String, dynamic>? parseJsonResponse(String text) {
-    String clean = text.trim();
-    // Strip ```json ... ``` or ``` ... ```
-    final fencePattern = RegExp(r'```(?:json)?\s*([\s\S]*?)```');
-    final match = fencePattern.firstMatch(clean);
-    if (match != null) {
-      clean = match.group(1)!.trim();
+  // ── Gemini (image / PDF) ─────────────────────────────────────────────────────
+
+  Future<String> _callGeminiWithFile({
+    required String    systemPrompt,
+    required String    userMessage,
+    required Uint8List fileBytes,
+    required String    mimeType,
+  }) async {
+    final b64 = base64Encode(fileBytes);
+    final url =
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$_geminiKey';
+
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'contents': [
+          {
+            'parts': [
+              {
+                'inline_data': {
+                  'mime_type': mimeType,
+                  'data':       b64,
+                },
+              },
+              {'text': '$systemPrompt\n\n$userMessage'},
+            ],
+          },
+        ],
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Gemini file API error: ${response.statusCode} ${response.body}');
     }
-    try {
-      return jsonDecode(clean) as Map<String, dynamic>;
-    } catch (_) {
-      return null;
-    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return data['candidates'][0]['content']['parts'][0]['text'] as String;
   }
 
-  /// Parse list of JSON objects from AI response
+  // ── JSON helpers ─────────────────────────────────────────────────────────────
+
+  static Map<String, dynamic>? parseJsonResponse(String text) {
+    String clean = text.trim();
+    final fence = RegExp(r'```(?:json)?\s*([\s\S]*?)```');
+    final match = fence.firstMatch(clean);
+    if (match != null) clean = match.group(1)!.trim();
+    try { return jsonDecode(clean) as Map<String, dynamic>; } catch (_) { return null; }
+  }
+
   static List<Map<String, dynamic>>? parseJsonArray(String text) {
     String clean = text.trim();
-    final fencePattern = RegExp(r'```(?:json)?\s*([\s\S]*?)```');
-    final match = fencePattern.firstMatch(clean);
-    if (match != null) {
-      clean = match.group(1)!.trim();
-    }
+    final fence = RegExp(r'```(?:json)?\s*([\s\S]*?)```');
+    final match = fence.firstMatch(clean);
+    if (match != null) clean = match.group(1)!.trim();
     try {
-      final list = jsonDecode(clean) as List;
-      return list.cast<Map<String, dynamic>>();
-    } catch (_) {
-      return null;
-    }
+      return (jsonDecode(clean) as List).cast<Map<String, dynamic>>();
+    } catch (_) { return null; }
   }
 }
