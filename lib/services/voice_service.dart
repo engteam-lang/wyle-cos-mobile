@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
@@ -15,6 +16,10 @@ class VoiceService {
   bool _speechAvailable       = false;
   bool _isListening           = false;
 
+  // Completer kept alive for the entire duration speech is playing.
+  // speak() awaits it so _isSpeaking stays true until speech actually ends.
+  Completer<void>? _speakCompleter;
+
   Future<void> init() async {
     _speechAvailable = await _speech.initialize(
       onStatus: (status) {},
@@ -24,6 +29,21 @@ class VoiceService {
     await _tts.setLanguage('en-US');
     await _tts.setPitch(1.0);
     await _tts.setSpeechRate(0.85); // Fast — natural but brisk
+
+    // Complete the completer when TTS finishes naturally
+    _tts.setCompletionHandler(() {
+      _speakCompleter?.complete();
+      _speakCompleter = null;
+    });
+    // Also complete on cancel or error so we never get stuck
+    _tts.setCancelHandler(() {
+      _speakCompleter?.complete();
+      _speakCompleter = null;
+    });
+    _tts.setErrorHandler((_) {
+      _speakCompleter?.complete();
+      _speakCompleter = null;
+    });
   }
 
   bool get isListening => _isListening;
@@ -74,14 +94,28 @@ class VoiceService {
     _isListening = false;
   }
 
-  /// Speak text aloud
+  /// Speak text aloud.
+  /// Returns only when speech has fully completed (or been stopped).
+  /// This keeps _isSpeaking = true for the full duration of playback.
   Future<void> speak(String text) async {
+    // Cancel any in-progress speech first
+    _speakCompleter?.complete();
+    _speakCompleter = null;
+
     await _tts.stop();
+
+    _speakCompleter = Completer<void>();
     await _tts.speak(text);
+
+    // Wait here until the completion/cancel/error handler fires
+    await _speakCompleter!.future;
   }
 
   Future<void> stopSpeaking() async {
     await _tts.stop();
+    // Manually complete in case the handler doesn't fire on this platform
+    _speakCompleter?.complete();
+    _speakCompleter = null;
   }
 
   bool get isSpeaking => false;
