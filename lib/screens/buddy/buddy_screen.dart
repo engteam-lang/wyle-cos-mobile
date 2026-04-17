@@ -224,6 +224,7 @@ Currency: AED. Context: Dubai, UAE.''';
                 _buildHeader(context),
                 Expanded(child: _buildMessageList()),
                 _buildQuickPrompts(),
+                _buildNowPlayingBar(),
                 _buildInputBar(),
               ],
             ),
@@ -238,65 +239,7 @@ Currency: AED. Context: Dubai, UAE.''';
                 ),
               ),
 
-            // ── TTS stop button (floats above input when Buddy is speaking) ────
-            AnimatedOpacity(
-              opacity: _isSpeaking ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              child: IgnorePointer(
-                ignoring: !_isSpeaking,
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    // Sits just above the quick-prompts bar
-                    padding: const EdgeInsets.only(bottom: 130),
-                    child: GestureDetector(
-                      onTap: () async {
-                        await VoiceService.instance.stopSpeaking();
-                        if (mounted) setState(() => _isSpeaking = false);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 22, vertical: 11),
-                        decoration: BoxDecoration(
-                          color: _surfaceEl,
-                          borderRadius: BorderRadius.circular(32),
-                          border: Border.all(
-                              color: _verdigris.withOpacity(0.55), width: 1),
-                          boxShadow: [
-                            BoxShadow(
-                                color: Colors.black.withOpacity(0.45),
-                                blurRadius: 16,
-                                offset: const Offset(0, 4)),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 28, height: 28,
-                              decoration: BoxDecoration(
-                                color: _verdigris.withOpacity(0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.stop_rounded,
-                                  color: _verdigris, size: 16),
-                            ),
-                            const SizedBox(width: 10),
-                            Text('Stop reading',
-                              style: GoogleFonts.inter(
-                                color: _white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              )),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            // Stack has no more overlay buttons — now-playing bar lives in Column
           ],
         ),
       ),
@@ -521,6 +464,112 @@ Currency: AED. Context: Dubai, UAE.''';
             ),
           );
         },
+      ),
+    );
+  }
+
+  // ── Now-playing bar (slides in when Buddy is reading TTS) ────────────────────
+  Widget _buildNowPlayingBar() {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+      // Height animates 0 → 60 — gives a smooth slide-up from the input bar
+      height: _isSpeaking ? 60 : 0,
+      child: SingleChildScrollView(
+        // Prevents overflow while height is still animating to 0
+        physics: const NeverScrollableScrollPhysics(),
+        child: Container(
+          height: 60,
+          margin: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F1F1E), // very dark verdigris tint
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _verdigris.withOpacity(0.45), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: _verdigris.withOpacity(0.12),
+                blurRadius: 12,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const SizedBox(width: 14),
+
+              // Animated waveform — shows audio is actively playing
+              _buildMiniWaveform(),
+
+              const SizedBox(width: 12),
+
+              // Label
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Buddy is reading',
+                      style: GoogleFonts.inter(
+                        color: _white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      )),
+                    Text('Tap ■ to stop',
+                      style: GoogleFonts.inter(
+                        color: _textSec,
+                        fontSize: 11,
+                      )),
+                  ],
+                ),
+              ),
+
+              // Stop button
+              GestureDetector(
+                onTap: () async {
+                  await VoiceService.instance.stopSpeaking();
+                  if (mounted) setState(() => _isSpeaking = false);
+                },
+                child: Container(
+                  width: 40, height: 40,
+                  margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                    color: _verdigris.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: _verdigris.withOpacity(0.5), width: 1),
+                  ),
+                  child: const Icon(Icons.stop_rounded,
+                      color: _verdigris, size: 20),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Five animated bars that represent audio playback
+  Widget _buildMiniWaveform() {
+    const heights = [6.0, 12.0, 16.0, 12.0, 6.0];
+    return AnimatedBuilder(
+      animation: _waveCtrl,
+      builder: (_, __) => Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: List.generate(5, (i) {
+          final phase = (_waveCtrl.value + i * 0.22) % 1.0;
+          final h = heights[i] * (0.35 + phase * 0.65);
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 80),
+            width: 3,
+            height: h,
+            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+            decoration: BoxDecoration(
+              color: _verdigris,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          );
+        }),
       ),
     );
   }
