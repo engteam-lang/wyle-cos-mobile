@@ -645,9 +645,9 @@ class _BrainDumpModalState extends ConsumerState<_BrainDumpModal>
       (text) {
         if (!mounted) return;
         setState(() => _transcript = text);
-        // Check completion intent first
+        // Check completion intent first — use fresh state
         if (_hasCompletionIntent(text)) {
-          final match = _findObligationInText(text, widget.existingObligations);
+          final match = _findObligationInText(text, ref.read(appStateProvider).obligations);
           if (match != null) {
             setState(() { _completionTarget = match; _voiceState = _VoiceState.done; });
             return;
@@ -702,10 +702,12 @@ class _BrainDumpModalState extends ConsumerState<_BrainDumpModal>
 
   // ── Save with duplicate check ──────────────────────────────────────────────
   void _handleSaveAll() {
+    // Always read fresh state so the check isn't stale from when the modal opened
+    final currentObs = ref.read(appStateProvider).obligations;
     final fresh = <ObligationModel>[];
     final dupes = <({ObligationModel incoming, ObligationModel existing})>[];
     for (final item in _parsed) {
-      final match = _findDuplicate(item, widget.existingObligations);
+      final match = _findDuplicate(item, currentObs);
       if (match != null) dupes.add((incoming: item, existing: match));
       else fresh.add(item);
     }
