@@ -70,10 +70,15 @@ Future<void> _handle(HttpRequest req) async {
   try {
     final proxyReq = await client.postUrl(Uri.parse(targetUrl));
 
-    // Forward headers (skip hop-by-hop headers)
-    const _skip = {'host', 'content-length', 'transfer-encoding', 'connection'};
+    // Forward headers — skip hop-by-hop AND browser-identity headers.
+    // Stripping origin/referer prevents Anthropic from treating the request
+    // as a browser CORS call (which would require anthropic-dangerous-direct-browser-access).
+    const _skipReq = {
+      'host', 'content-length', 'transfer-encoding', 'connection',
+      'origin', 'referer',
+    };
     req.headers.forEach((name, values) {
-      if (!_skip.contains(name.toLowerCase())) {
+      if (!_skipReq.contains(name.toLowerCase())) {
         for (final v in values) proxyReq.headers.add(name, v);
       }
     });
@@ -85,9 +90,18 @@ Future<void> _handle(HttpRequest req) async {
 
     req.response.statusCode = proxyRes.statusCode;
 
-    // Forward response headers (skip hop-by-hop)
+    // Forward response headers — skip hop-by-hop AND upstream CORS headers.
+    // Upstream APIs (Groq) may return their own Access-Control-Allow-Origin: *
+    // which would duplicate the one we already set above → browser rejects "*, *".
+    const _skipRes = {
+      'host', 'content-length', 'transfer-encoding', 'connection',
+      'access-control-allow-origin',
+      'access-control-allow-methods',
+      'access-control-allow-headers',
+      'access-control-expose-headers',
+    };
     proxyRes.headers.forEach((name, values) {
-      if (!_skip.contains(name.toLowerCase())) {
+      if (!_skipRes.contains(name.toLowerCase())) {
         for (final v in values) {
           try { req.response.headers.add(name, v); } catch (_) {}
         }
