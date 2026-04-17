@@ -17,8 +17,10 @@ class AiService {
   /// Run `dart run server/proxy.dart` in your Codespace and set
   /// PROXY_URL=https://<codespace>-8081.app.github.dev in .env.
   /// On native (iOS/Android) this value is ignored — APIs are called directly.
-  static String get _proxyUrl =>
-      dotenv.env['PROXY_URL'] ?? 'http://localhost:8081';
+  static String get _proxyUrl {
+    final raw = dotenv.env['PROXY_URL'] ?? 'http://localhost:8081';
+    return raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
+  }
 
   /// Returns the correct URL for a given AI endpoint.
   /// On web, routes through the local proxy to avoid CORS errors.
