@@ -1,12 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:wyle_cos/models/obligation_model.dart';
 import 'package:wyle_cos/navigation/app_router.dart';
 import 'package:wyle_cos/providers/app_state.dart';
 import 'package:wyle_cos/services/brief_service.dart';
+import 'package:wyle_cos/services/google_auth_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Colour constants (inline so this file is self-contained)
@@ -466,6 +470,233 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
+  // ── Google data fetchers ──────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> _fetchCalendarEvents() async {
+    final token = await GoogleAuthService.instance.getAccessToken();
+    if (token == null) return [];
+    final now = DateTime.now().toUtc().toIso8601String();
+    final uri = Uri.parse(
+      'https://www.googleapis.com/calendar/v3/calendars/primary/events'
+      '?orderBy=startTime&singleEvents=true&maxResults=10&timeMin=${Uri.encodeComponent(now)}',
+    );
+    final res = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    if (res.statusCode != 200) return [];
+    final body = json.decode(res.body) as Map<String, dynamic>;
+    return List<Map<String, dynamic>>.from(body['items'] ?? []);
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchGmailMessages() async {
+    final token = await GoogleAuthService.instance.getAccessToken();
+    if (token == null) return [];
+    final listUri = Uri.parse(
+      'https://www.googleapis.com/gmail/v1/users/me/messages?maxResults=8&q=is:unread',
+    );
+    final listRes = await http.get(listUri, headers: {'Authorization': 'Bearer $token'});
+    if (listRes.statusCode != 200) return [];
+    final listBody = json.decode(listRes.body) as Map<String, dynamic>;
+    final messages = List<Map<String, dynamic>>.from(listBody['messages'] ?? []);
+    final result = <Map<String, dynamic>>[];
+    for (final msg in messages.take(8)) {
+      final id = msg['id'];
+      final detailUri = Uri.parse(
+        'https://www.googleapis.com/gmail/v1/users/me/messages/$id'
+        '?format=metadata&metadataHeaders=subject&metadataHeaders=from&metadataHeaders=date',
+      );
+      final detailRes = await http.get(detailUri, headers: {'Authorization': 'Bearer $token'});
+      if (detailRes.statusCode == 200) {
+        final detail = json.decode(detailRes.body) as Map<String, dynamic>;
+        final headers = List<Map<String, dynamic>>.from(
+          detail['payload']?['headers'] ?? [],
+        );
+        String subject = '(no subject)';
+        String from = '';
+        for (final h in headers) {
+          if (h['name'] == 'Subject') subject = h['value'] ?? subject;
+          if (h['name'] == 'From') from = h['value'] ?? from;
+        }
+        result.add({'subject': subject, 'from': from, 'id': id});
+      }
+    }
+    return result;
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchDriveFiles() async {
+    final token = await GoogleAuthService.instance.getAccessToken();
+    if (token == null) return [];
+    final uri = Uri.parse(
+      'https://www.googleapis.com/drive/v3/files'
+      '?pageSize=10&orderBy=modifiedTime+desc'
+      '&fields=files(id,name,mimeType,modifiedTime)',
+    );
+    final res = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    if (res.statusCode != 200) return [];
+    final body = json.decode(res.body) as Map<String, dynamic>;
+    return List<Map<String, dynamic>>.from(body['files'] ?? []);
+  }
+
+  void _openCalendarSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (_) => _AsyncSheetContent(
+        title: 'Upcoming Events',
+        icon: Icons.calendar_today_rounded,
+        iconColor: const Color(0xFF1A73E8),
+        future: _fetchCalendarEvents(),
+        emptyMessage: 'No upcoming events found.',
+        itemBuilder: (item) {
+          final summary = item['summary'] ?? 'Untitled Event';
+          final start = item['start'];
+          String timeStr = '';
+          if (start != null) {
+            final dt = start['dateTime'] ?? start['date'];
+            if (dt != null) {
+              try {
+                final parsed = DateTime.parse(dt as String).toLocal();
+                timeStr = start['dateTime'] != null
+                    ? DateFormat('EEE, MMM d · h:mm a').format(parsed)
+                    : DateFormat('EEE, MMM d').format(parsed);
+              } catch (_) {
+                timeStr = dt.toString();
+              }
+            }
+          }
+          return _sheetItem(
+            icon: Icons.event_rounded,
+            iconColor: const Color(0xFF1A73E8),
+            title: summary,
+            subtitle: timeStr,
+          );
+        },
+      ),
+    );
+  }
+
+  void _openGmailSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (_) => _AsyncSheetContent(
+        title: 'Unread Emails',
+        icon: Icons.mail_rounded,
+        iconColor: const Color(0xFFEA4335),
+        future: _fetchGmailMessages(),
+        emptyMessage: 'No unread emails.',
+        itemBuilder: (item) => _sheetItem(
+          icon: Icons.mail_outline_rounded,
+          iconColor: const Color(0xFFEA4335),
+          title: item['subject'] ?? '(no subject)',
+          subtitle: item['from'] ?? '',
+        ),
+      ),
+    );
+  }
+
+  void _openDriveSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (_) => _AsyncSheetContent(
+        title: 'Recent Drive Files',
+        icon: Icons.folder_rounded,
+        iconColor: const Color(0xFF34A853),
+        future: _fetchDriveFiles(),
+        emptyMessage: 'No recent files found.',
+        itemBuilder: (item) {
+          final name = item['name'] ?? 'Unnamed';
+          String modified = '';
+          if (item['modifiedTime'] != null) {
+            try {
+              final dt = DateTime.parse(item['modifiedTime'] as String).toLocal();
+              modified = DateFormat('MMM d, y').format(dt);
+            } catch (_) {}
+          }
+          return _sheetItem(
+            icon: _driveIcon(item['mimeType'] ?? ''),
+            iconColor: const Color(0xFF34A853),
+            title: name,
+            subtitle: modified.isNotEmpty ? 'Modified $modified' : '',
+          );
+        },
+      ),
+    );
+  }
+
+  IconData _driveIcon(String mimeType) {
+    if (mimeType.contains('spreadsheet')) return Icons.table_chart_rounded;
+    if (mimeType.contains('presentation')) return Icons.slideshow_rounded;
+    if (mimeType.contains('document')) return Icons.description_rounded;
+    if (mimeType.contains('folder')) return Icons.folder_rounded;
+    if (mimeType.contains('image')) return Icons.image_rounded;
+    if (mimeType.contains('pdf')) return Icons.picture_as_pdf_rounded;
+    return Icons.insert_drive_file_rounded;
+  }
+
+  Widget _sheetItem({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: iconColor, size: 18),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _white,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.inter(fontSize: 11, color: _textSec),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Google banner ─────────────────────────────────────────────────────────────
   Widget _buildGoogleBanner(AppState state) {
     if (!state.googleConnected) {
@@ -578,11 +809,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           const SizedBox(height: 12),
           Row(
             children: [
-              _chipBadge('Gmail', const Color(0xFFEA4335)),
+              _chipBadge('Gmail', const Color(0xFFEA4335), onTap: _openGmailSheet),
               const SizedBox(width: 8),
-              _chipBadge('Calendar', const Color(0xFF1A73E8)),
+              _chipBadge('Calendar', const Color(0xFF1A73E8), onTap: _openCalendarSheet),
               const SizedBox(width: 8),
-              _chipBadge('Drive', const Color(0xFF34A853)),
+              _chipBadge('Drive', const Color(0xFF34A853), onTap: _openDriveSheet),
             ],
           ),
         ],
@@ -598,20 +829,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  Widget _chipBadge(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(
-        label,
-        style: GoogleFonts.inter(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
+  Widget _chipBadge(String label, Color color, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+            if (onTap != null) ...[
+              const SizedBox(width: 3),
+              Icon(Icons.chevron_right, color: color, size: 12),
+            ],
+          ],
         ),
       ),
     );
@@ -1096,6 +1339,132 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Async bottom-sheet content (loads data then renders list)
+// ─────────────────────────────────────────────────────────────────────────────
+class _AsyncSheetContent extends StatefulWidget {
+  final String title;
+  final IconData icon;
+  final Color iconColor;
+  final Future<List<Map<String, dynamic>>> future;
+  final String emptyMessage;
+  final Widget Function(Map<String, dynamic>) itemBuilder;
+
+  const _AsyncSheetContent({
+    required this.title,
+    required this.icon,
+    required this.iconColor,
+    required this.future,
+    required this.emptyMessage,
+    required this.itemBuilder,
+  });
+
+  @override
+  State<_AsyncSheetContent> createState() => _AsyncSheetContentState();
+}
+
+class _AsyncSheetContentState extends State<_AsyncSheetContent> {
+  late Future<List<Map<String, dynamic>>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.future;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      maxChildSize: 0.9,
+      minChildSize: 0.4,
+      expand: false,
+      builder: (_, controller) => Column(
+        children: [
+          // Handle
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFF555555),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 34, height: 34,
+                  decoration: BoxDecoration(
+                    color: widget.iconColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(widget.icon, color: widget.iconColor, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  widget.title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 16, fontWeight: FontWeight.w600,
+                    color: const Color(0xFFFFFFFF),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(color: Color(0xFF2A2A2A), height: 1),
+          // Content
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _future,
+              builder: (_, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(
+                      color: Color(0xFF1B998B), strokeWidth: 2,
+                    ),
+                  );
+                }
+                if (snap.hasError) {
+                  return Center(
+                    child: Text(
+                      'Failed to load data.\nCheck your Google connection.',
+                      style: GoogleFonts.inter(
+                          fontSize: 13, color: const Color(0xFF9A9A9A)),
+                      textAlign: TextAlign.center,
+                    ),
+                  );
+                }
+                final items = snap.data ?? [];
+                if (items.isEmpty) {
+                  return Center(
+                    child: Text(
+                      widget.emptyMessage,
+                      style: GoogleFonts.inter(
+                          fontSize: 13, color: const Color(0xFF9A9A9A)),
+                    ),
+                  );
+                }
+                return ListView.separated(
+                  controller: controller,
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) =>
+                      const Divider(color: Color(0xFF2A2A2A), height: 1, indent: 16),
+                  itemBuilder: (_, i) => widget.itemBuilder(items[i]),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
