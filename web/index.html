@@ -6,9 +6,8 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Wyle - Your AI Digital Chief of Staff">
 
-  <!-- Google Sign-In: replace GOOGLE_WEB_CLIENT_ID with your actual client ID -->
-  <!-- Format: XXXXXXXX-xxxx.apps.googleusercontent.com -->
-  <meta name="google-signin-client_id" content="GOOGLE_WEB_CLIENT_ID">
+  <!-- Google Sign-In -->
+  <meta name="google-signin-client_id" content="1011814035417-oiea7nm5mutt8hg04n81jovr37r6fmnp.apps.googleusercontent.com">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -16,24 +15,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Wyle">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="icons/Icon-192.png"/>
-
   <title>Wyle</title>
   <link rel="manifest" href="manifest.json">
 
-  <script src="flutter.js" defer></script>
+  <style>
+    body { margin: 0; background-color: #0D0D0D; }
+  </style>
 </head>
 <body>
-  <script>
-    window.addEventListener('load', function(ev) {
-      _flutter.loader.load({
-        onEntrypointLoaded: async function(engineInitializer) {
-          let appRunner = await engineInitializer.initializeEngine();
-          await appRunner.runApp();
-        }
-      });
-    });
-  </script>
+  <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
