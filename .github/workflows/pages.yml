@@ -25,6 +25,21 @@ jobs:
           flutter-version: '3.32.2'
           channel: 'stable'
 
+      - name: Create .env file
+        run: |
+          cat > .env << 'EOF'
+          EXPO_PUBLIC_API_URL=${{ secrets.API_URL || 'http://localhost:3000/api' }}
+          EXPO_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID=${{ secrets.GOOGLE_CLIENT_ID_ANDROID }}
+          EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS=${{ secrets.GOOGLE_CLIENT_ID_IOS }}
+          EXPO_PUBLIC_ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+          EXPO_PUBLIC_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+          EXPO_PUBLIC_GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+          EXPO_PUBLIC_GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+          EXPO_PUBLIC_OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
+          PROXY_URL=${{ secrets.PROXY_URL }}
+          EOF
+
       - name: Install dependencies
         run: flutter pub get
 
