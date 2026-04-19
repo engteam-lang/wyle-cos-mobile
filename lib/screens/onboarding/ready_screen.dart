@@ -6,9 +6,8 @@ import 'package:wyle_cos/navigation/app_router.dart';
 import 'package:wyle_cos/providers/app_state.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Morning Brief Onboarding Screen
-// Figma: "I'm Buddy, your AI Chief of Staff"
-// Shows once after login — Buddy introduces the daily 6 AM morning brief.
+// Morning Brief Onboarding Screen  — matches Figma design
+// "I'm Buddy, your AI Chief of Staff"
 // ─────────────────────────────────────────────────────────────────────────────
 class ReadyScreen extends ConsumerStatefulWidget {
   const ReadyScreen({super.key});
@@ -20,8 +19,8 @@ class ReadyScreen extends ConsumerStatefulWidget {
 class _ReadyScreenState extends ConsumerState<ReadyScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _fadeCtrl;
-  late Animation<double> _fadeAnim;
-  late Animation<Offset> _slideAnim;
+  late Animation<double>   _fadeAnim;
+  late Animation<Offset>   _slideAnim;
 
   @override
   void initState() {
@@ -30,11 +29,9 @@ class _ReadyScreenState extends ConsumerState<ReadyScreen>
       vsync: this,
       duration: const Duration(milliseconds: 700),
     )..forward();
-    _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
-    _slideAnim = Tween<Offset>(
-      begin: const Offset(0, 0.06),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut));
+    _fadeAnim  = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
+    _slideAnim = Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut));
   }
 
   @override
@@ -51,8 +48,7 @@ class _ReadyScreenState extends ConsumerState<ReadyScreen>
   @override
   Widget build(BuildContext context) {
     final appState = ref.watch(appStateProvider);
-    final userName = appState.user?.name ?? '';
-    final gender = _detectGender(userName);
+    final gender   = _detectGender(appState.user?.name ?? '');
 
     return Scaffold(
       body: Container(
@@ -62,11 +58,7 @@ class _ReadyScreenState extends ConsumerState<ReadyScreen>
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF002F3A),
-              Color(0xFF001A24),
-              Color(0xFF000D12),
-            ],
+            colors: [Color(0xFF002F3A), Color(0xFF001A24), Color(0xFF000D12)],
             stops: [0.0, 0.55, 1.0],
           ),
         ),
@@ -76,22 +68,78 @@ class _ReadyScreenState extends ConsumerState<ReadyScreen>
             child: SlideTransition(
               position: _slideAnim,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
+                padding: const EdgeInsets.symmetric(horizontal: 28),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    const Spacer(flex: 2),
-                    // Avatar
-                    _buildAvatar(gender),
-                    const SizedBox(height: 36),
-                    // Headline
-                    _buildHeadline(),
-                    const SizedBox(height: 20),
-                    // Morning brief message
-                    _buildBriefMessage(),
                     const Spacer(flex: 3),
-                    // Continue button
-                    _buildContinueButton(),
+
+                    // ── Avatar (rounded square, like Figma) ──────────────────
+                    _buildAvatar(gender),
+
+                    const SizedBox(height: 28),
+
+                    // ── Headline ─────────────────────────────────────────────
+                    Text(
+                      "I'm Buddy, your AI Chief\nof Staff",
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        height: 1.25,
+                      ),
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // ── Morning brief copy ───────────────────────────────────
+                    RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        style: GoogleFonts.poppins(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w400,
+                          color: const Color(0xFF8FB8BF),
+                          height: 1.6,
+                        ),
+                        children: [
+                          const TextSpan(text: 'Your morning brief is set for '),
+                          TextSpan(
+                            text: '6:00 AM',
+                            style: GoogleFonts.poppins(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF1B998B),
+                            ),
+                          ),
+                          const TextSpan(text: '\nevery day.'),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    Text(
+                      'You can change this anytime in your profile.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: const Color(0xFF4A7A85),
+                      ),
+                    ),
+
                     const SizedBox(height: 36),
+
+                    // ── "Let's get started" button ───────────────────────────
+                    _buildCTAButton(),
+
+                    const Spacer(flex: 2),
+
+                    // ── Three tips ───────────────────────────────────────────
+                    _buildTips(),
+
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
@@ -102,131 +150,56 @@ class _ReadyScreenState extends ConsumerState<ReadyScreen>
     );
   }
 
-  // ── Avatar ────────────────────────────────────────────────────────────────
-
+  // ── Avatar ─────────────────────────────────────────────────────────────────
+  // Rounded-square white card (like Figma) rather than a circle
   Widget _buildAvatar(String gender) {
-    final isMale = gender != 'female';
+    final isMale    = gender != 'female';
     final assetPath = isMale
         ? 'assets/avatars/buddy_male.png'
         : 'assets/avatars/buddy_female.png';
-    final glowColor =
-        isMale ? const Color(0xFF1B998B) : const Color(0xFFE91E8C);
+    final glowColor = isMale
+        ? const Color(0xFF1B998B)
+        : const Color(0xFFE91E8C);
 
-    return Column(
-      children: [
-        Container(
-          width: 110, height: 110,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: glowColor.withOpacity(0.35),
-                blurRadius: 40,
-                spreadRadius: 4,
-              ),
-            ],
+    return Container(
+      width: 108, height: 108,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: glowColor.withOpacity(0.35),
+            blurRadius: 32,
+            spreadRadius: 4,
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(55),
-            child: Image.asset(
-              assetPath,
-              width: 110, height: 110,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                width: 110, height: 110,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: isMale
-                        ? [const Color(0xFF1B998B), const Color(0xFF0A4A44)]
-                        : [const Color(0xFFE91E8C), const Color(0xFF7B1FA2)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Icon(
-                  isMale ? Icons.person_rounded : Icons.person_outline_rounded,
-                  color: Colors.white,
-                  size: 50,
-                ),
-              ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: Image.asset(
+          assetPath,
+          width: 108, height: 108,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            color: const Color(0xFF0A2E38),
+            child: Icon(
+              isMale ? Icons.person_rounded : Icons.person_outline_rounded,
+              color: glowColor,
+              size: 52,
             ),
           ),
         ),
-        const SizedBox(height: 10),
-        Text(
-          'Buddy',
-          style: GoogleFonts.poppins(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: const Color(0xFF4A9E94),
-            letterSpacing: 0.5,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Headline ──────────────────────────────────────────────────────────────
-
-  Widget _buildHeadline() {
-    return Text(
-      "I'm Buddy, your AI Chief\nof Staff",
-      textAlign: TextAlign.center,
-      style: GoogleFonts.poppins(
-        fontSize: 28,
-        fontWeight: FontWeight.w600,
-        color: Colors.white,
-        height: 1.25,
       ),
     );
   }
 
-  // ── Morning brief message ─────────────────────────────────────────────────
-
-  Widget _buildBriefMessage() {
-    return Column(
-      children: [
-        RichText(
-          textAlign: TextAlign.center,
-          text: TextSpan(
-            style: GoogleFonts.poppins(
-              fontSize: 15,
-              fontWeight: FontWeight.w400,
-              color: const Color(0xFF8FB8BF),
-              height: 1.6,
-            ),
-            children: [
-              const TextSpan(text: 'Your morning brief is set for '),
-              TextSpan(
-                text: '6:00 AM',
-                style: GoogleFonts.poppins(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF1B998B),
-                ),
-              ),
-              const TextSpan(text: '\nevery day.'),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          'You can change this anytime in your profile.',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.poppins(
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            color: const Color(0xFF4A7A85),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Continue button ───────────────────────────────────────────────────────
-
-  Widget _buildContinueButton() {
+  // ── CTA button ─────────────────────────────────────────────────────────────
+  Widget _buildCTAButton() {
     return GestureDetector(
       onTap: _continue,
       child: Container(
@@ -235,8 +208,8 @@ class _ReadyScreenState extends ConsumerState<ReadyScreen>
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           gradient: const LinearGradient(
-            colors: [Color(0xFF1B998B), Color(0xFF4DBF7A), Color(0xFFCBD842)],
-            stops: [0.0, 0.5, 1.0],
+            colors: [Color(0xFF1B998B), Color(0xFF52C878), Color(0xFFD4E840)],
+            stops: [0.0, 0.45, 1.0],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
           ),
@@ -250,12 +223,11 @@ class _ReadyScreenState extends ConsumerState<ReadyScreen>
         ),
         child: Center(
           child: Text(
-            'Continue',
+            "Let's get started",
             style: GoogleFonts.poppins(
               fontSize: 16,
               fontWeight: FontWeight.w600,
               color: const Color(0xFF001A24),
-              letterSpacing: 0.2,
             ),
           ),
         ),
@@ -263,16 +235,56 @@ class _ReadyScreenState extends ConsumerState<ReadyScreen>
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Three tips ─────────────────────────────────────────────────────────────
+  Widget _buildTips() {
+    final tips = [
+      (icon: Icons.chat_bubble_outline_rounded,
+       text: 'Talk to me naturally – I understand context'),
+      (icon: Icons.mic_none_rounded,
+       text: 'Voice dumps work best – just tell me everything'),
+      (icon: Icons.settings_outlined,
+       text: 'Tap your profile icon anytime for settings'),
+    ];
 
+    return Column(
+      children: tips.map((t) => Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 32, height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A2E38),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(t.icon, color: const Color(0xFF1B998B), size: 17),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                t.text,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: const Color(0xFF7AACB8),
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
+        ),
+      )).toList(),
+    );
+  }
+
+  // ── Gender heuristic ───────────────────────────────────────────────────────
   String _detectGender(String name) {
     const femaleNames = {
-      'sarah', 'emma', 'olivia', 'sophia', 'ava', 'isabella', 'mia',
-      'charlotte', 'amelia', 'harper', 'evelyn', 'abigail', 'emily',
-      'elizabeth', 'mila', 'ella', 'avery', 'sofia', 'camila', 'aria',
-      'luna', 'chloe', 'penelope', 'layla', 'riley', 'zoey', 'nora',
-      'lily', 'eleanor', 'hannah', 'priya', 'aisha', 'fatima', 'noura',
-      'mariam', 'reem', 'sara', 'lena', 'dina', 'hana', 'dana', 'maya',
+      'sarah','emma','olivia','sophia','ava','isabella','mia','charlotte',
+      'amelia','harper','evelyn','abigail','emily','elizabeth','mila','ella',
+      'avery','sofia','camila','aria','luna','chloe','penelope','layla',
+      'riley','zoey','nora','lily','eleanor','hannah','priya','aisha',
+      'fatima','noura','mariam','reem','sara','lena','dina','hana','dana','maya',
     };
     final first = name.trim().split(' ').first.toLowerCase();
     return femaleNames.contains(first) ? 'female' : 'male';
