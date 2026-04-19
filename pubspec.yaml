@@ -63,3 +63,5 @@ flutter:
 
   assets:
     - .env
+    - assets/avatars/buddy_male.png
+    - assets/avatars/buddy_female.png

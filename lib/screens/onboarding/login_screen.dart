@@ -6,7 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wyle_cos/navigation/app_router.dart';
 import 'package:wyle_cos/providers/app_state.dart';
 import 'package:wyle_cos/models/user_model.dart';
+import 'package:wyle_cos/services/google_auth_service.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Login Screen — SSO only, matching Figma design
+// Background: dark teal-to-black gradient
+// Providers: Google · Apple · Microsoft (circle icons) + UAE Pass (full-width)
+// ─────────────────────────────────────────────────────────────────────────────
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -15,119 +21,118 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen>
-    with TickerProviderStateMixin {
-  bool _isCreateMode = true;
+    with SingleTickerProviderStateMixin {
   bool _isLoading = false;
+  String? _loadingProvider; // 'google' | 'apple' | 'microsoft' | 'uaepass'
   String? _errorMessage;
 
-  final _nameController    = TextEditingController();
-  final _emailController   = TextEditingController();
-  final _locationController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
-
-  late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
+  late AnimationController _fadeCtrl;
+  late Animation<double> _fadeAnim;
 
   @override
   void initState() {
     super.initState();
-    _fadeController = AnimationController(
+    _fadeCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 600),
     )..forward();
-    _fadeAnimation = CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeOut,
-    );
+    _fadeAnim =
+        CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _locationController.dispose();
-    _passwordController.dispose();
-    _fadeController.dispose();
+    _fadeCtrl.dispose();
     super.dispose();
   }
 
-  void _switchMode(bool createMode) {
-    if (_isCreateMode == createMode) return;
+  // ── Auth helpers ─────────────────────────────────────────────────────────
+
+  Future<void> _signInWithGoogle() async {
     setState(() {
-      _isCreateMode = createMode;
+      _isLoading = true;
+      _loadingProvider = 'google';
       _errorMessage = null;
     });
-    _fadeController.reset();
-    _fadeController.forward();
-  }
-
-  bool _validate() {
-    if (_isCreateMode) {
-      if (_nameController.text.trim().isEmpty ||
-          _emailController.text.trim().isEmpty ||
-          _locationController.text.trim().isEmpty ||
-          _passwordController.text.isEmpty) {
-        setState(() => _errorMessage = 'Please fill in all fields.');
-        return false;
+    try {
+      final account = await GoogleAuthService.instance.signIn();
+      if (!mounted) return;
+      if (account != null) {
+        await _completeAuth(
+          id: account.id,
+          name: account.displayName ?? account.email.split('@').first,
+          email: account.email,
+          provider: 'google',
+        );
+      } else {
+        setState(() => _errorMessage = 'Google sign-in was cancelled.');
       }
-    } else {
-      if (_emailController.text.trim().isEmpty ||
-          _passwordController.text.isEmpty) {
-        setState(() => _errorMessage = 'Please enter your email and password.');
-        return false;
-      }
-    }
-    setState(() => _errorMessage = null);
-    return true;
-  }
-
-  Future<void> _submit() async {
-    if (!_validate()) return;
-
-    setState(() => _isLoading = true);
-
-    // Demo mode — accept any credentials
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    final mockToken = 'demo_token_${DateTime.now().millisecondsSinceEpoch}';
-    final mockUser = UserModel(
-      id: 'demo_user_001',
-      name: _isCreateMode
-          ? _nameController.text.trim()
-          : _emailController.text.split('@').first,
-      email: _emailController.text.trim(),
-      onboardingComplete: false,
-      onboardingStep: 1,
-      preferences: const UserPreferences(),
-      autonomyTier: 1,
-      insights: const UserInsights(),
-    );
-
-    // Persist to SharedPreferences
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', mockToken);
-    await prefs.setString('user_email', mockUser.email);
-    await prefs.setString('user_name', mockUser.name);
-
-    // Update app state
-    await ref.read(appStateProvider.notifier).setAuth(mockToken, mockUser);
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-      context.go(AppRoutes.preparation);
+    } catch (e) {
+      setState(() => _errorMessage = 'Google sign-in failed. Please try again.');
+    } finally {
+      if (mounted) setState(() { _isLoading = false; _loadingProvider = null; });
     }
   }
 
-  Future<void> _googleSignIn() async {
-    setState(() => _isLoading = true);
+  Future<void> _signInWithApple() async {
+    setState(() {
+      _isLoading = true;
+      _loadingProvider = 'apple';
+      _errorMessage = null;
+    });
     await Future.delayed(const Duration(milliseconds: 800));
-
-    final mockToken = 'google_demo_token_${DateTime.now().millisecondsSinceEpoch}';
-    final mockUser = UserModel(
-      id: 'google_demo_user_001',
+    // TODO: Implement Apple Sign-In via sign_in_with_apple package
+    await _completeAuth(
+      id: 'apple_demo_001',
       name: 'Demo User',
-      email: 'demo@gmail.com',
+      email: 'demo@icloud.com',
+      provider: 'apple',
+    );
+  }
+
+  Future<void> _signInWithMicrosoft() async {
+    setState(() {
+      _isLoading = true;
+      _loadingProvider = 'microsoft';
+      _errorMessage = null;
+    });
+    await Future.delayed(const Duration(milliseconds: 800));
+    // TODO: Implement Microsoft MSAL sign-in
+    await _completeAuth(
+      id: 'microsoft_demo_001',
+      name: 'Demo User',
+      email: 'demo@outlook.com',
+      provider: 'microsoft',
+    );
+  }
+
+  Future<void> _signInWithUAEPass() async {
+    setState(() {
+      _isLoading = true;
+      _loadingProvider = 'uaepass';
+      _errorMessage = null;
+    });
+    await Future.delayed(const Duration(milliseconds: 800));
+    // TODO: Implement UAE Pass OAuth
+    await _completeAuth(
+      id: 'uaepass_demo_001',
+      name: 'Demo User',
+      email: 'demo@uaepass.ae',
+      provider: 'uaepass',
+    );
+  }
+
+  Future<void> _completeAuth({
+    required String id,
+    required String name,
+    required String email,
+    required String provider,
+  }) async {
+    final token = '${provider}_token_${DateTime.now().millisecondsSinceEpoch}';
+    final user = UserModel(
+      id: id,
+      name: name,
+      email: email,
       onboardingComplete: false,
       onboardingStep: 1,
       preferences: const UserPreferences(),
@@ -136,68 +141,68 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     );
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', mockToken);
-    await prefs.setString('user_email', mockUser.email);
-    await prefs.setString('user_name', mockUser.name);
+    await prefs.setString('auth_token', token);
+    await prefs.setString('user_email', email);
+    await prefs.setString('user_name', name);
 
-    await ref.read(appStateProvider.notifier).setAuth(mockToken, mockUser);
+    await ref.read(appStateProvider.notifier).setAuth(token, user);
 
     if (mounted) {
-      setState(() => _isLoading = false);
+      setState(() { _isLoading = false; _loadingProvider = null; });
       context.go(AppRoutes.preparation);
     }
   }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFF002F3A),
-              Color(0xFF001820),
-              Color(0xFF000000),
+              Color(0xFF002F3A), // Nocturne
+              Color(0xFF001A24),
+              Color(0xFF000D12),
             ],
-            stops: [0.0, 0.5, 1.0],
+            stops: [0.0, 0.55, 1.0],
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Column(
-              children: [
-                const SizedBox(height: 40),
-                _buildLogo(),
-                const SizedBox(height: 32),
-                _buildToggle(),
-                const SizedBox(height: 28),
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: _buildFields(),
-                ),
-                if (_errorMessage != null) ...[
-                  const SizedBox(height: 16),
-                  _buildErrorBox(),
+          child: FadeTransition(
+            opacity: _fadeAnim,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 36),
+              child: Column(
+                children: [
+                  const Spacer(flex: 3),
+                  _buildLogo(),
+                  const Spacer(flex: 3),
+                  _buildSSORow(),
+                  const SizedBox(height: 28),
+                  _buildOrDivider(),
+                  const SizedBox(height: 28),
+                  _buildUAEPassButton(),
+                  const SizedBox(height: 20),
+                  if (_errorMessage != null) _buildErrorText(),
+                  const Spacer(flex: 2),
+                  _buildFooter(),
+                  const SizedBox(height: 24),
                 ],
-                const SizedBox(height: 24),
-                _buildPrimaryButton(),
-                const SizedBox(height: 24),
-                _buildDivider(),
-                const SizedBox(height: 24),
-                _buildGoogleButton(),
-                const SizedBox(height: 40),
-                _buildFooter(),
-                const SizedBox(height: 24),
-              ],
+              ),
             ),
           ),
         ),
       ),
     );
   }
+
+  // ── Logo ──────────────────────────────────────────────────────────────────
 
   Widget _buildLogo() {
     return Column(
@@ -205,290 +210,190 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         Text(
           'WYLE',
           style: GoogleFonts.poppins(
-            fontSize: 36,
-            fontWeight: FontWeight.w200,
-            color: const Color(0xFFFEFFFE),
-            letterSpacing: 12,
-            shadows: [
-              const Shadow(
-                color: Color(0x881B998B),
-                blurRadius: 20,
-                offset: Offset.zero,
-              ),
-            ],
+            fontSize: 48,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+            letterSpacing: 6,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 8),
         Text(
-          _isCreateMode ? 'Create your account' : 'Welcome back',
+          'Your AI Chief of Staff',
           style: GoogleFonts.poppins(
-            fontSize: 14,
+            fontSize: 15,
+            fontWeight: FontWeight.w300,
             color: const Color(0xFF8FB8BF),
+            letterSpacing: 0.4,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildToggle() {
-    return Container(
-      height: 48,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A3D4A),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFF1A5060)),
-      ),
-      child: Row(
-        children: [
-          _ToggleButton(
-            label: 'Create Account',
-            active: _isCreateMode,
-            onTap: () => _switchMode(true),
-          ),
-          _ToggleButton(
-            label: 'Sign In',
-            active: !_isCreateMode,
-            onTap: () => _switchMode(false),
-          ),
-        ],
-      ),
-    );
-  }
+  // ── Three SSO Circles ────────────────────────────────────────────────────
 
-  Widget _buildFields() {
-    return Column(
+  Widget _buildSSORow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        if (_isCreateMode) ...[
-          _InputField(
-            controller: _nameController,
-            hint: 'Full Name',
-            icon: Icons.person_outline_rounded,
-          ),
-          const SizedBox(height: 14),
-        ],
-        _InputField(
-          controller: _emailController,
-          hint: 'Email Address',
-          icon: Icons.mail_outline_rounded,
-          keyboardType: TextInputType.emailAddress,
+        _SSOCircle(
+          provider: 'google',
+          isLoading: _loadingProvider == 'google',
+          onTap: _isLoading ? null : _signInWithGoogle,
+          child: _GoogleIcon(),
         ),
-        if (_isCreateMode) ...[
-          const SizedBox(height: 14),
-          _InputField(
-            controller: _locationController,
-            hint: 'Location (City, Country)',
-            icon: Icons.location_on_outlined,
-          ),
-        ],
-        const SizedBox(height: 14),
-        _InputField(
-          controller: _passwordController,
-          hint: 'Password',
-          icon: Icons.lock_outline_rounded,
-          obscureText: _obscurePassword,
-          suffixIcon: IconButton(
-            icon: Icon(
-              _obscurePassword
-                  ? Icons.visibility_outlined
-                  : Icons.visibility_off_outlined,
-              color: const Color(0xFF4A7A85),
-              size: 20,
-            ),
-            onPressed: () =>
-                setState(() => _obscurePassword = !_obscurePassword),
-          ),
+        const SizedBox(width: 24),
+        _SSOCircle(
+          provider: 'apple',
+          isLoading: _loadingProvider == 'apple',
+          onTap: _isLoading ? null : _signInWithApple,
+          child: const Icon(Icons.apple, color: Colors.white, size: 26),
+        ),
+        const SizedBox(width: 24),
+        _SSOCircle(
+          provider: 'microsoft',
+          isLoading: _loadingProvider == 'microsoft',
+          onTap: _isLoading ? null : _signInWithMicrosoft,
+          child: _MicrosoftIcon(),
         ),
       ],
     );
   }
 
-  Widget _buildErrorBox() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFD7263D).withOpacity(0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFD7263D).withOpacity(0.4),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline_rounded,
-              color: Color(0xFFD7263D), size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              _errorMessage!,
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                color: const Color(0xFFD7263D),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // ── OR Divider ────────────────────────────────────────────────────────────
 
-  Widget _buildPrimaryButton() {
-    return GestureDetector(
-      onTap: _isLoading ? null : _submit,
-      child: Container(
-        width: double.infinity,
-        height: 56,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF1B998B), Color(0xFFD5FF3F)],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF1B998B).withOpacity(0.35),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Center(
-          child: _isLoading
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Color(0xFF002F3A),
-                  ),
-                )
-              : Text(
-                  _isCreateMode
-                      ? 'Continue to Dashboard ›'
-                      : 'Sign In ›',
-                  style: GoogleFonts.poppins(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF002F3A),
-                    letterSpacing: 0.3,
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDivider() {
+  Widget _buildOrDivider() {
     return Row(
       children: [
         Expanded(
-          child: Container(
-            height: 1,
-            color: const Color(0xFF1A5060),
-          ),
+          child: Container(height: 1, color: const Color(0xFF1C4A56)),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
-            'or',
+            'OR',
             style: GoogleFonts.poppins(
-              fontSize: 13,
-              color: const Color(0xFF4A7A85),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFF5A8A96),
+              letterSpacing: 1.5,
             ),
           ),
         ),
         Expanded(
-          child: Container(
-            height: 1,
-            color: const Color(0xFF1A5060),
-          ),
+          child: Container(height: 1, color: const Color(0xFF1C4A56)),
         ),
       ],
     );
   }
 
-  Widget _buildGoogleButton() {
+  // ── UAE Pass Button ───────────────────────────────────────────────────────
+
+  Widget _buildUAEPassButton() {
+    final isLoading = _loadingProvider == 'uaepass';
     return GestureDetector(
-      onTap: _isLoading ? null : _googleSignIn,
-      child: Container(
-        width: double.infinity,
-        height: 56,
-        decoration: BoxDecoration(
-          color: const Color(0xFFFEFFFE),
-          borderRadius: BorderRadius.circular(999),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+      onTap: _isLoading ? null : _signInWithUAEPass,
+      child: AnimatedOpacity(
+        opacity: _isLoading && !isLoading ? 0.5 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        child: Container(
+          width: double.infinity,
+          height: 58,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFF1B998B), // teal
+                Color(0xFF4DBF7A), // mid-green
+                Color(0xFFCBD842), // yellow-green
+              ],
+              stops: [0.0, 0.5, 1.0],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
             ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Google G icon composed of colored circles
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFFEA4335),
-                        width: 3,
-                      ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF1B998B).withOpacity(0.30),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (isLoading)
+                const SizedBox(
+                  width: 22, height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Color(0xFF001A24),
+                  ),
+                )
+              else ...[
+                // UAE flag square icon
+                Container(
+                  width: 28, height: 20,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    color: Colors.transparent,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: Column(
+                      children: [
+                        Expanded(child: Container(color: const Color(0xFF00732F))),
+                        Expanded(child: Container(color: Colors.white)),
+                        Expanded(child: Container(color: Colors.black)),
+                      ],
                     ),
                   ),
-                  Positioned(
-                    right: 0,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      color: const Color(0xFFFEFFFE),
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF4285F4),
-                          borderRadius: BorderRadius.only(
-                            topRight: Radius.circular(6),
-                          ),
-                        ),
-                      ),
-                    ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Continue with UAE Pass',
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF001A24),
+                    letterSpacing: 0.2,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              'Sign in with Google',
-              style: GoogleFonts.poppins(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFF1A1A1A),
-              ),
-            ),
-          ],
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
+
+  // ── Error ─────────────────────────────────────────────────────────────────
+
+  Widget _buildErrorText() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        _errorMessage!,
+        textAlign: TextAlign.center,
+        style: GoogleFonts.poppins(
+          fontSize: 13,
+          color: const Color(0xFFFF6B6B),
+        ),
+      ),
+    );
+  }
+
+  // ── Footer ────────────────────────────────────────────────────────────────
 
   Widget _buildFooter() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const Icon(Icons.lock_outline_rounded,
-            color: Color(0xFF4A7A85), size: 14),
+            color: Color(0xFF4A7A85), size: 13),
         const SizedBox(width: 6),
         Text(
-          'Your information is encrypted and secure.',
+          'Secure authentication · No passwords required',
           style: GoogleFonts.poppins(
             fontSize: 11,
             color: const Color(0xFF4A7A85),
@@ -499,95 +404,184 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }
 }
 
-// ── Subwidgets ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SSO Circle Button
+// ─────────────────────────────────────────────────────────────────────────────
 
-class _ToggleButton extends StatelessWidget {
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
+class _SSOCircle extends StatefulWidget {
+  final String provider;
+  final bool isLoading;
+  final VoidCallback? onTap;
+  final Widget child;
 
-  const _ToggleButton({
-    required this.label,
-    required this.active,
+  const _SSOCircle({
+    required this.provider,
+    required this.isLoading,
     required this.onTap,
+    required this.child,
   });
 
   @override
+  State<_SSOCircle> createState() => _SSOCircleState();
+}
+
+class _SSOCircleState extends State<_SSOCircle>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pressCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _pressCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 100),
+      lowerBound: 0.92,
+      upperBound: 1.0,
+      value: 1.0,
+    );
+  }
+
+  @override
+  void dispose() {
+    _pressCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          margin: const EdgeInsets.all(4),
+    return GestureDetector(
+      onTapDown: (_) => _pressCtrl.reverse(),
+      onTapUp: (_) => _pressCtrl.forward(),
+      onTapCancel: () => _pressCtrl.forward(),
+      onTap: widget.onTap,
+      child: AnimatedBuilder(
+        animation: _pressCtrl,
+        builder: (context, child) => Transform.scale(
+          scale: _pressCtrl.value,
+          child: child,
+        ),
+        child: Container(
+          width: 68, height: 68,
           decoration: BoxDecoration(
-            color: active ? const Color(0xFF1B998B) : Colors.transparent,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                fontWeight:
-                    active ? FontWeight.w600 : FontWeight.w400,
-                color: active
-                    ? const Color(0xFFFEFFFE)
-                    : const Color(0xFF8FB8BF),
-              ),
+            shape: BoxShape.circle,
+            color: const Color(0xFF0A2E38),
+            border: Border.all(
+              color: const Color(0xFF1C4A56),
+              width: 1.5,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
+          child: widget.isLoading
+              ? const Center(
+                  child: SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF1B998B),
+                    ),
+                  ),
+                )
+              : Center(child: widget.child),
         ),
       ),
     );
   }
 }
 
-class _InputField extends StatelessWidget {
-  final TextEditingController controller;
-  final String hint;
-  final IconData icon;
-  final TextInputType? keyboardType;
-  final bool obscureText;
-  final Widget? suffixIcon;
+// ─────────────────────────────────────────────────────────────────────────────
+// Google "G" Icon
+// ─────────────────────────────────────────────────────────────────────────────
 
-  const _InputField({
-    required this.controller,
-    required this.hint,
-    required this.icon,
-    this.keyboardType,
-    this.obscureText = false,
-    this.suffixIcon,
-  });
-
+class _GoogleIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A3D4A),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFF1A5060)),
-      ),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        obscureText: obscureText,
-        style: GoogleFonts.poppins(
-          fontSize: 14,
-          color: const Color(0xFFFEFFFE),
-        ),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: GoogleFonts.poppins(
-            fontSize: 14,
-            color: const Color(0xFF4A7A85),
-          ),
-          prefixIcon: Icon(icon, color: const Color(0xFF1B998B), size: 20),
-          suffixIcon: suffixIcon,
-          border: InputBorder.none,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        ),
+    return CustomPaint(
+      size: const Size(26, 26),
+      painter: _GoogleGPainter(),
+    );
+  }
+}
+
+class _GoogleGPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+
+    // Draw the circular arcs in Google colors
+    final colors = [
+      const Color(0xFFEA4335), // red - top
+      const Color(0xFFFBBC05), // yellow - bottom-left
+      const Color(0xFF34A853), // green - bottom
+      const Color(0xFF4285F4), // blue - left
+    ];
+
+    final strokeWidth = size.width * 0.18;
+    final rect = Rect.fromCircle(center: center, radius: radius - strokeWidth / 2);
+
+    // Red arc (top to right)
+    canvas.drawArc(
+      rect, -1.57, 1.57, false,
+      Paint()..color = colors[0]..strokeWidth = strokeWidth..style = PaintingStyle.stroke..strokeCap = StrokeCap.round,
+    );
+    // Yellow arc
+    canvas.drawArc(
+      rect, 0.0, 1.57, false,
+      Paint()..color = colors[1]..strokeWidth = strokeWidth..style = PaintingStyle.stroke..strokeCap = StrokeCap.round,
+    );
+    // Green arc
+    canvas.drawArc(
+      rect, 1.57, 1.0, false,
+      Paint()..color = colors[2]..strokeWidth = strokeWidth..style = PaintingStyle.stroke..strokeCap = StrokeCap.round,
+    );
+    // Blue arc
+    canvas.drawArc(
+      rect, 2.57, 1.0, false,
+      Paint()..color = colors[3]..strokeWidth = strokeWidth..style = PaintingStyle.stroke..strokeCap = StrokeCap.round,
+    );
+
+    // Blue horizontal line (the bar of the G)
+    final barY = center.dy;
+    final barLeft = center.dx;
+    final barRight = center.dx + radius - strokeWidth / 2;
+    canvas.drawLine(
+      Offset(barLeft, barY),
+      Offset(barRight, barY),
+      Paint()..color = colors[3]..strokeWidth = strokeWidth * 0.85..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Microsoft ⊞ Icon
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _MicrosoftIcon extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 24, height: 24,
+      child: GridView.count(
+        crossAxisCount: 2,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 2,
+        crossAxisSpacing: 2,
+        padding: EdgeInsets.zero,
+        children: [
+          Container(color: const Color(0xFFF25022)),  // red
+          Container(color: const Color(0xFF7FBA00)),  // green
+          Container(color: const Color(0xFF00A4EF)),  // blue
+          Container(color: const Color(0xFFFFB900)),  // yellow
+        ],
       ),
     );
   }

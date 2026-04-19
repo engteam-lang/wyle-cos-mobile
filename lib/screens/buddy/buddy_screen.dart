@@ -942,9 +942,7 @@ Currency: AED. Context: Dubai, UAE.''';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Buddy Avatar Widget — male / female
-// Replace assets with real 3D avatar images when available:
-//   assets/avatars/buddy_male.png
-//   assets/avatars/buddy_female.png
+// Uses real 3D avatar images from assets/avatars/
 // ─────────────────────────────────────────────────────────────────────────────
 class _BuddyAvatar extends StatelessWidget {
   final String gender; // 'male' or 'female'
@@ -955,23 +953,50 @@ class _BuddyAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMale = gender != 'female';
-    final color1 = isMale
+    final assetPath = isMale
+        ? 'assets/avatars/buddy_male.png'
+        : 'assets/avatars/buddy_female.png';
+    final glowColor = isMale
         ? const Color(0xFF1B998B)
         : const Color(0xFFE91E8C);
-    final color2 = isMale
-        ? const Color(0xFF0A4A44)
-        : const Color(0xFF7B1FA2);
 
-    // TODO: Replace with asset image when available:
-    // return ClipRRect(
-    //   borderRadius: BorderRadius.circular(size / 2),
-    //   child: Image.asset(
-    //     isMale ? 'assets/avatars/buddy_male.png'
-    //            : 'assets/avatars/buddy_female.png',
-    //     width: size, height: size, fit: BoxFit.cover,
-    //   ),
-    // );
+    return Container(
+      width: size, height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: glowColor.withOpacity(0.35),
+            blurRadius: size * 0.4,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(size / 2),
+        child: Image.asset(
+          assetPath,
+          width: size, height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _FallbackAvatar(
+            size: size, isMale: isMale,
+          ),
+        ),
+      ),
+    );
+  }
+}
 
+// Fallback gradient circle if asset fails to load
+class _FallbackAvatar extends StatelessWidget {
+  final double size;
+  final bool isMale;
+  const _FallbackAvatar({required this.size, required this.isMale});
+
+  @override
+  Widget build(BuildContext context) {
+    final color1 = isMale ? const Color(0xFF1B998B) : const Color(0xFFE91E8C);
+    final color2 = isMale ? const Color(0xFF0A4A44) : const Color(0xFF7B1FA2);
     return Container(
       width: size, height: size,
       decoration: BoxDecoration(
@@ -981,13 +1006,6 @@ class _BuddyAvatar extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [color1, color2],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: color1.withOpacity(0.4),
-            blurRadius: size * 0.3,
-            spreadRadius: 1,
-          ),
-        ],
       ),
       child: Icon(
         isMale ? Icons.person_rounded : Icons.person_outline_rounded,

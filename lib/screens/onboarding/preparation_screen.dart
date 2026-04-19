@@ -83,7 +83,7 @@ class _PreparationScreenState extends ConsumerState<PreparationScreen>
         );
       }
       if (mounted) {
-        context.go(AppRoutes.main);
+        context.go(AppRoutes.ready); // → Morning brief onboarding screen
       }
     });
   }
