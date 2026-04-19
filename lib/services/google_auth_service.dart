@@ -5,12 +5,16 @@ import 'package:google_sign_in/google_sign_in.dart';
 class GoogleAuthResult {
   final bool success;
   final String email;
+  final String? id;
+  final String? displayName;
   final String? accessToken;
   final String? error;
 
   const GoogleAuthResult({
     required this.success,
     this.email = '',
+    this.id,
+    this.displayName,
     this.accessToken,
     this.error,
   });
@@ -53,6 +57,8 @@ class GoogleAuthService {
       return GoogleAuthResult(
         success:     true,
         email:       account.email,
+        id:          account.id,
+        displayName: account.displayName,
         accessToken: auth.accessToken,
       );
     } catch (e) {
@@ -78,6 +84,8 @@ class GoogleAuthService {
       return GoogleAuthResult(
         success:     true,
         email:       account.email,
+        id:          account.id,
+        displayName: account.displayName,
         accessToken: auth.accessToken,
       );
     } catch (_) {

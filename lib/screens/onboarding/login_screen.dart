@@ -57,15 +57,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     try {
       final account = await GoogleAuthService.instance.signIn();
       if (!mounted) return;
-      if (account != null) {
+      if (account.success) {
         await _completeAuth(
-          id: account.id,
+          id: account.id ?? account.email,
           name: account.displayName ?? account.email.split('@').first,
           email: account.email,
           provider: 'google',
         );
       } else {
-        setState(() => _errorMessage = 'Google sign-in was cancelled.');
+        setState(() => _errorMessage =
+            account.error == 'Cancelled'
+                ? 'Google sign-in was cancelled.'
+                : 'Google sign-in failed. Please try again.');
       }
     } catch (e) {
       setState(() => _errorMessage = 'Google sign-in failed. Please try again.');
