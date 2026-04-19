@@ -29,8 +29,8 @@ class MainScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final activeIndex = _currentIndex(context);
 
-    // Hide tab bar on Buddy screen — it shows its own immersive header + back btn
-    final showTabBar = activeIndex != 2;
+    // Always show tab bar on all main screens
+    const showTabBar = true;
 
     return Scaffold(
       backgroundColor: AppColors.bgDark,
