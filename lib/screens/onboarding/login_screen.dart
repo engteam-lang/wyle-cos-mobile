@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -540,31 +541,41 @@ class _PressableButtonState extends State<_PressableButton>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Google "G" icon — accurate branded logo
+// Google "G" icon — filled donut-slice segments (no stroke bleed)
 // ─────────────────────────────────────────────────────────────────────────────
 class _GoogleIcon extends StatelessWidget {
   const _GoogleIcon();
-
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 30, height: 30,
-      child: CustomPaint(painter: _GoogleGPainter()),
-    );
+    return SizedBox(width: 30, height: 30, child: CustomPaint(painter: _GoogleGPainter()));
   }
 }
 
 class _GoogleGPainter extends CustomPainter {
+  // Draws one filled donut slice from startDeg to (startDeg+sweepDeg), clockwise.
+  void _slice(Canvas canvas, double cx, double cy,
+      double outerR, double innerR,
+      double startDeg, double sweepDeg, Color color) {
+    final s = startDeg * math.pi / 180;
+    final e = (startDeg + sweepDeg) * math.pi / 180;
+    final path = Path()
+      ..moveTo(cx + outerR * math.cos(s), cy + outerR * math.sin(s))
+      ..arcTo(Rect.fromCircle(center: Offset(cx, cy), radius: outerR),
+              s, e - s, false)
+      ..lineTo(cx + innerR * math.cos(e), cy + innerR * math.sin(e))
+      ..arcTo(Rect.fromCircle(center: Offset(cx, cy), radius: innerR),
+              e, s - e, false)
+      ..close();
+    canvas.drawPath(path,
+        Paint()..color = color..style = PaintingStyle.fill..isAntiAlias = true);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
+    final cx = size.width  / 2;
     final cy = size.height / 2;
-
-    // Geometry — match the real Google G proportions
-    final r  = size.width / 2 * 0.90;  // circle radius (slightly inset)
-    final sw = r * 0.40;               // stroke width ≈ 40% of radius
-    final ar = r - sw / 2;             // arc centre-line radius
-    final rect = Rect.fromCircle(center: Offset(cx, cy), radius: ar);
+    final outerR = size.width / 2 * 0.94;
+    final innerR = size.width / 2 * 0.50;
 
     // Google brand colours
     const blue   = Color(0xFF4285F4);
@@ -572,42 +583,26 @@ class _GoogleGPainter extends CustomPainter {
     const yellow = Color(0xFFFBBC05);
     const green  = Color(0xFF34A853);
 
-    // Helper: stroke paint with butt caps (no rounded overrun)
-    Paint mk(Color c) => Paint()
-      ..color = c
-      ..strokeWidth = sw
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.butt;
-
-    // ── Arc segments ──────────────────────────────────────────────────────────
-    // Angles in Flutter canvas: 0° = 3 o'clock, 90° = 6 o'clock (clockwise)
+    // ── Ring segments ─────────────────────────────────────────────────────────
+    // 0° = 3 o'clock, clockwise.
+    // Gap of 40° centred on 0° (right / equator): from 340° → 20°.
     //
-    // The real Google G has a ~24° opening on the right side (equator level).
-    // Gap: 348° → 12°  (clockwise), centred on 0° / 3 o'clock.
-    //
-    // Clockwise from gap-end (12°):
-    //   Yellow :  12° →  62°  ( 50° sweep) — lower-right
-    //   Green  :  62° → 197°  (135° sweep) — bottom & lower-left
-    //   Blue   : 197° → 247°  ( 50° sweep) — left side
-    //   Red    : 247° → 348°  (101° sweep) — upper-left → top → upper-right
-    //   [gap]  : 348° → 372°(=12°)  24° opening
-    //
-    const double deg = 3.14159265358979 / 180.0;
-    canvas.drawArc(rect,  12 * deg,  50 * deg, false, mk(yellow));
-    canvas.drawArc(rect,  62 * deg, 135 * deg, false, mk(green));
-    canvas.drawArc(rect, 197 * deg,  50 * deg, false, mk(blue));
-    canvas.drawArc(rect, 247 * deg, 101 * deg, false, mk(red));
+    //  Yellow:  20° →  67°  (47°)   lower-right
+    //  Green:   67° → 197°  (130°)  bottom + lower-left
+    //  Blue:   197° → 247°  (50°)   left side
+    //  Red:    247° → 340°  (93°)   upper-left → top → upper-right
+    //  [gap]:  340° → 380°  (40°)   ← opening of the G
+    _slice(canvas, cx, cy, outerR, innerR,  20,  47, yellow);
+    _slice(canvas, cx, cy, outerR, innerR,  67, 130, green);
+    _slice(canvas, cx, cy, outerR, innerR, 197,  50, blue);
+    _slice(canvas, cx, cy, outerR, innerR, 247,  93, red);
 
     // ── Horizontal bar ────────────────────────────────────────────────────────
-    // Blue, from the circle centre to the right edge at equator level.
-    // Height = sw so it fills the opening gap cleanly.
-    canvas.drawLine(
-      Offset(cx, cy),
-      Offset(cx + ar + sw / 2, cy),   // reaches outer edge of arc stroke
-      Paint()
-        ..color = blue
-        ..strokeWidth = sw
-        ..strokeCap = StrokeCap.butt,
+    // Filled blue rectangle: centre → right edge, height = ring thickness.
+    final thickness = outerR - innerR;
+    canvas.drawRect(
+      Rect.fromLTRB(cx, cy - thickness / 2, cx + outerR, cy + thickness / 2),
+      Paint()..color = blue..style = PaintingStyle.fill,
     );
   }
 
