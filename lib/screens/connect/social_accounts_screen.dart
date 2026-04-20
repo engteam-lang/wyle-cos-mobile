@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'connect_screen.dart' show kProfileBg, kProfileCard, kProfileBorder;
+import 'connect_screen.dart' show kProfileBg, kProfileCard, kProfileBorder, kProfileGradient;
 
 class SocialAccountsScreen extends ConsumerStatefulWidget {
   const SocialAccountsScreen({super.key});
@@ -48,7 +48,9 @@ class _SocialAccountsScreenState extends ConsumerState<SocialAccountsScreen>
     return Scaffold(
       backgroundColor: kProfileBg,
       body: Container(
-        color: kProfileBg,
+        width: double.infinity,
+        height: double.infinity,
+        decoration: kProfileGradient,
         child: SafeArea(
           child: FadeTransition(
             opacity: _fade,

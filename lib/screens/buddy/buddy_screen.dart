@@ -18,11 +18,11 @@ import '../../services/ai_service.dart';
 import '../../services/voice_service.dart';
 
 // ── Palette ────────────────────────────────────────────────────────────────────
-const _bgTop      = Color(0xFF0B1F1C);
-const _bgBot      = Color(0xFF0D0D0D);
-const _surface    = Color(0xFF0F2420);
-const _surfaceEl  = Color(0xFF1A2E2B);
-const _border     = Color(0xFF1F3A36);
+const _bgTop      = Color(0xFF002F3A);   // matches login screen gradient top
+const _bgBot      = Color(0xFF000D12);   // matches login screen gradient bottom
+const _surface    = Color(0xFF0A2A38);
+const _surfaceEl  = Color(0xFF1A3A4A);
+const _border     = Color(0xFF1C4A56);
 const _verdigris  = Color(0xFF1B998B);
 const _crimson    = Color(0xFFFF3B30);
 const _white      = Color(0xFFFFFFFF);
@@ -333,7 +333,8 @@ Currency: AED. Context: Dubai, UAE.''';
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [_bgTop, _bgBot],
+            colors: [_bgTop, Color(0xFF001E29), _bgBot],
+            stops: [0.0, 0.6, 1.0],
           ),
         ),
         child: SafeArea(

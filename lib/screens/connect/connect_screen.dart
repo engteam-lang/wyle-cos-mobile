@@ -6,11 +6,25 @@ import '../../navigation/app_router.dart';
 import '../../providers/app_state.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Shared background used by every profile sub-screen
+// Shared palette used by every profile sub-screen
+// Gradient matches the login screen exactly.
 // ─────────────────────────────────────────────────────────────────────────────
-const kProfileBg    = Color(0xFF0D1E1C);   // flat dark-teal — no gradient
-const kProfileCard  = Color(0xFF132E2A);
-const kProfileBorder= Color(0xFF1E3E3A);
+const kProfileBg     = Color(0xFF000D12);   // darkest stop — Scaffold bg
+const kProfileCard   = Color(0xFF0A2A38);   // card bg
+const kProfileBorder = Color(0xFF1C4A56);   // card border
+
+const kProfileGradient = BoxDecoration(
+  gradient: LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFF002F3A),
+      Color(0xFF001E29),
+      Color(0xFF000D12),
+    ],
+    stops: [0.0, 0.6, 1.0],
+  ),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Profile Screen — connections hub
@@ -58,10 +72,11 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
     const role  = 'Founder & CEO';
 
     return Scaffold(
-      // Solid explicit colour — eliminates bleed-through from outer scaffold
       backgroundColor: kProfileBg,
       body: Container(
-        color: kProfileBg,
+        width: double.infinity,
+        height: double.infinity,
+        decoration: kProfileGradient,
         child: SafeArea(
           child: FadeTransition(
             opacity: _fadeAnim,

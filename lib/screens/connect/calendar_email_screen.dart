@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'connect_screen.dart' show kProfileBg, kProfileCard, kProfileBorder;
+import 'connect_screen.dart' show kProfileBg, kProfileCard, kProfileBorder, kProfileGradient;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -54,7 +54,9 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
     return Scaffold(
       backgroundColor: kProfileBg,
       body: Container(
-        color: kProfileBg,
+        width: double.infinity,
+        height: double.infinity,
+        decoration: kProfileGradient,
         child: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
