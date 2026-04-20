@@ -389,7 +389,7 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
   Widget _connectBtn({
     required String label,
     required Color color,
-    required VoidCallback onTap,
+    VoidCallback? onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
