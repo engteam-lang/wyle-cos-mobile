@@ -19,6 +19,14 @@ import '../screens/calendar/calendar_screen.dart';
 import '../screens/food/food_screen.dart';
 import '../screens/connect/connect_screen.dart';
 import '../screens/connect/calendar_email_screen.dart';
+import '../screens/connect/payments_screen.dart';
+import '../screens/connect/government_screen.dart';
+import '../screens/connect/social_accounts_screen.dart';
+import '../screens/connect/whatsapp_screen.dart';
+import '../screens/connect/commercial_apps_screen.dart';
+import '../screens/connect/devices_health_screen.dart';
+import '../screens/connect/buddy_settings_screen.dart';
+import '../screens/connect/automation_screen.dart';
 import '../screens/brief/morning_brief_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/main/main_screen.dart';
@@ -42,8 +50,16 @@ class AppRoutes {
   static const calendar       = '/calendar';
   static const food           = '/food';
   static const connect        = '/main/connect';
-  static const calendarEmail  = '/calendar-email';
-  static const morningBrief   = '/morning-brief';
+  static const calendarEmail       = '/calendar-email';
+  static const profilePayments     = '/profile/payments';
+  static const profileGovernment   = '/profile/government';
+  static const profileSocial       = '/profile/social';
+  static const profileWhatsapp     = '/profile/whatsapp';
+  static const profileCommercial   = '/profile/commercial';
+  static const profileDevices      = '/profile/devices';
+  static const profileBuddySettings= '/profile/buddy-settings';
+  static const profileAutomation   = '/profile/automation';
+  static const morningBrief        = '/morning-brief';
   static const settings       = '/settings';
 }
 
@@ -140,8 +156,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: AppRoutes.calendar,     builder: (_, __) => const CalendarScreen()),
       GoRoute(path: AppRoutes.food,         builder: (_, __) => const FoodScreen()),
-      GoRoute(path: AppRoutes.calendarEmail, builder: (_, __) => const CalendarEmailScreen()),
-      GoRoute(path: AppRoutes.morningBrief, builder: (_, __) => const MorningBriefScreen()),
+      GoRoute(path: AppRoutes.calendarEmail,        builder: (_, __) => const CalendarEmailScreen()),
+      GoRoute(path: AppRoutes.profilePayments,      builder: (_, __) => const PaymentsScreen()),
+      GoRoute(path: AppRoutes.profileGovernment,    builder: (_, __) => const GovernmentScreen()),
+      GoRoute(path: AppRoutes.profileSocial,        builder: (_, __) => const SocialAccountsScreen()),
+      GoRoute(path: AppRoutes.profileWhatsapp,      builder: (_, __) => const WhatsAppScreen()),
+      GoRoute(path: AppRoutes.profileCommercial,    builder: (_, __) => const CommercialAppsScreen()),
+      GoRoute(path: AppRoutes.profileDevices,       builder: (_, __) => const DevicesHealthScreen()),
+      GoRoute(path: AppRoutes.profileBuddySettings, builder: (_, __) => const BuddySettingsScreen()),
+      GoRoute(path: AppRoutes.profileAutomation,    builder: (_, __) => const AutomationScreen()),
+      GoRoute(path: AppRoutes.morningBrief,         builder: (_, __) => const MorningBriefScreen()),
       GoRoute(path: AppRoutes.settings,     builder: (_, __) => const SettingsScreen()),
     ],
   );

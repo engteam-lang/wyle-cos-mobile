@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'connect_screen.dart' show kProfileBg, kProfileCard, kProfileBorder;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -51,8 +52,10 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1C1A),
-      body: SafeArea(
+      backgroundColor: kProfileBg,
+      body: Container(
+        color: kProfileBg,
+        child: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
           child: SlideTransition(
@@ -63,7 +66,7 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
                 _buildHeader(context),
                 Expanded(
                   child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
+                    physics: const ClampingScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -83,6 +86,7 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
             ),
           ),
         ),
+      ),
       ),
     );
   }
