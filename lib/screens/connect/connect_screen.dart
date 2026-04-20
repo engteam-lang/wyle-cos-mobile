@@ -48,7 +48,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
     final role  = 'Founder & CEO';   // TODO: pull from user profile
 
     return Scaffold(
-      backgroundColor: const Color(0xFF081412),
+      backgroundColor: const Color(0xFF0B1C1A),
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
@@ -187,9 +187,9 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
-            color: const Color(0xFF0E2420),
+            color: const Color(0xFF132E2A),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF1A3530), width: 1),
+            border: Border.all(color: const Color(0xFF1E3E3A), width: 1),
           ),
           child: Row(
             children: [

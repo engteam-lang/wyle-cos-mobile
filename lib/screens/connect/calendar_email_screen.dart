@@ -51,7 +51,7 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF081412),
+      backgroundColor: const Color(0xFF0B1C1A),
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
@@ -99,9 +99,9 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
               width: 34,
               height: 34,
               decoration: BoxDecoration(
-                color: const Color(0xFF1A2E2B),
+                color: const Color(0xFF1A3530),
                 shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF2A3E3B)),
+                border: Border.all(color: const Color(0xFF254540)),
               ),
               child: const Icon(Icons.arrow_back_ios_new_rounded,
                   color: Colors.white70, size: 16),
@@ -142,10 +142,10 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
       curve: Curves.easeOutCubic,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: c ? const Color(0xFF082418) : const Color(0xFF0E2420),
+        color: c ? const Color(0xFF0A2A1A) : const Color(0xFF132E2A),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: c ? const Color(0xFF1B8B5A) : const Color(0xFF1A3530),
+          color: c ? const Color(0xFF1B8B5A) : const Color(0xFF1E3E3A),
           width: c ? 1.5 : 1.0,
         ),
         boxShadow: c
@@ -169,7 +169,7 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
                     size: const Size(26, 26), painter: _GoogleGPainter()),
                 bg: c
                     ? const Color(0xFF0D3020)
-                    : const Color(0xFF1A2A28),
+                    : const Color(0xFF1A3530),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -232,10 +232,10 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
       curve: Curves.easeOutCubic,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: c ? const Color(0xFF081828) : const Color(0xFF0E2420),
+        color: c ? const Color(0xFF0A1A2E) : const Color(0xFF132E2A),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: c ? const Color(0xFF1E6FBF) : const Color(0xFF1A3530),
+          color: c ? const Color(0xFF1E6FBF) : const Color(0xFF1E3E3A),
           width: c ? 1.5 : 1.0,
         ),
         boxShadow: c
@@ -260,10 +260,10 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
                     painter: _OutlookLogoPainter(
                         holeBg: c
                             ? const Color(0xFF0D1E38)
-                            : const Color(0xFF1A2A28))),
+                            : const Color(0xFF1A3530))),
                 bg: c
                     ? const Color(0xFF0D1E38)
-                    : const Color(0xFF1A2A28),
+                    : const Color(0xFF1A3530),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -436,9 +436,9 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0E2420),
+        color: const Color(0xFF132E2A),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF1A3530)),
+        border: Border.all(color: const Color(0xFF1E3E3A)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
