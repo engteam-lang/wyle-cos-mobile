@@ -15,6 +15,7 @@ import '../../models/obligation_model.dart';
 import '../../navigation/app_router.dart';
 import '../../providers/app_state.dart';
 import '../../services/ai_service.dart';
+import '../../services/buddy_api_service.dart';
 import '../../services/voice_service.dart';
 
 // ── Palette ────────────────────────────────────────────────────────────────────
@@ -218,8 +219,10 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
     try {
       final obligations = ref.read(activeObligationsProvider);
-      final String response;
+      String response;
+
       if (file?.bytes != null) {
+        // File attachments: always use AiService (vision-capable)
         response = await AiService.instance.completeWithFile(
           systemPrompt: _buildSystemPrompt(obligations),
           userMessage: aiMessage,
@@ -228,12 +231,15 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
           maxTokens: 1500,
         );
       } else {
-        response = await AiService.instance.complete(
-          systemPrompt: _buildSystemPrompt(obligations),
-          userMessage: aiMessage,
-          maxTokens: 600,
-        );
+        // Text messages: try Buddy API first, fall back to AiService
+        response = await _sendViaBuddyApi(aiMessage)
+            ?? await AiService.instance.complete(
+                 systemPrompt: _buildSystemPrompt(obligations),
+                 userMessage:  aiMessage,
+                 maxTokens:    600,
+               );
       }
+
       setState(() {
         _messages.add(ChatMessageModel.assistant(response));
         _isProcessing = false;
@@ -254,6 +260,28 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         _messages.add(ChatMessageModel.assistant(errMsg));
         _isProcessing = false;
       });
+    }
+  }
+
+  /// Sends the message to the Wyle backend (/v1/chat/messages).
+  /// Returns the assistant reply string, or null if the call fails
+  /// (in which case the caller falls back to AiService).
+  Future<String?> _sendViaBuddyApi(String content) async {
+    try {
+      final convId = ref.read(appStateProvider).activeConversationId;
+      final apiResp = await BuddyApiService.instance.sendMessage(
+        content:        content,
+        conversationId: convId,
+      );
+      // Persist the conversation id so follow-up messages stay in the same thread
+      if (apiResp.conversationId != convId) {
+        await ref.read(appStateProvider.notifier)
+            .setActiveConversation(apiResp.conversationId);
+      }
+      return apiResp.assistantContent;
+    } catch (_) {
+      // API unavailable — silent fallback to AiService
+      return null;
     }
   }
 

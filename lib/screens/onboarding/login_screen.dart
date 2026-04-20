@@ -8,6 +8,7 @@ import 'package:wyle_cos/navigation/app_router.dart';
 import 'package:wyle_cos/providers/app_state.dart';
 import 'package:wyle_cos/models/user_model.dart';
 import 'package:wyle_cos/services/google_auth_service.dart';
+import 'package:wyle_cos/services/buddy_api_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Login Screen — matches Figma design exactly
@@ -120,8 +121,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Future<void> _signInWithMicrosoft() async {
     _setLoading('microsoft');
-    await Future.delayed(const Duration(milliseconds: 600));
-    // TODO: MSAL
+    try {
+      // Ask Buddy API for the Microsoft OAuth start URL
+      final data = await BuddyApiService.instance.startOAuth('microsoft');
+      final authUrl = data['auth_url'] as String?;
+      if (!mounted) return;
+      if (authUrl != null && authUrl.isNotEmpty) {
+        // Launch OAuth in platform browser; deep-link callback will complete auth.
+        // For now fall through to demo user if URL launch is unavailable.
+        _setError('Open this URL to sign in with Microsoft:\n$authUrl');
+        _clearLoading();
+        return;
+      }
+    } catch (_) {
+      // API unavailable — fall through to demo path
+    }
     await _completeAuth(
       id: 'ms_demo', name: 'Demo User',
       email: 'demo@outlook.com', provider: 'microsoft',
@@ -151,8 +165,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Future<void> _completeAuth({
     required String id, required String name,
     required String email, required String provider,
+    String? apiToken,     // JWT from Buddy API OAuth callback (if available)
   }) async {
-    final token = '${provider}_${DateTime.now().millisecondsSinceEpoch}';
+    // Use API token if we have one; otherwise generate a local placeholder
+    final token = apiToken ?? '${provider}_${DateTime.now().millisecondsSinceEpoch}';
     final user = UserModel(
       id: id, name: name, email: email,
       onboardingComplete: false, onboardingStep: 1,
@@ -164,10 +180,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     await prefs.setString('user_email', email);
     await prefs.setString('user_name', name);
     await ref.read(appStateProvider.notifier).setAuth(token, user);
+    // Best-effort: fetch profile from Buddy API to get linked accounts
+    _fetchBuddyProfile();
     if (mounted) {
       _clearLoading();
       context.go(AppRoutes.preparation);
     }
+  }
+
+  /// Fire-and-forget: fetch /v1/users/me after login to sync linked accounts.
+  void _fetchBuddyProfile() {
+    BuddyApiService.instance.getMe().then((data) {
+      // Data available — can update user model or google accounts here
+      // For now just silently succeed; future iterations will hydrate state
+    }).catchError((_) { /* not yet linked — that's fine */ });
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────

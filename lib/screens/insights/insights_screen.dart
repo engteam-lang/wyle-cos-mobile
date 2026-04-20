@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/insights_model.dart';
+import '../../models/insights_summary_model.dart';
 import '../../providers/app_state.dart';
+import '../../services/buddy_api_service.dart';
 import '../../utils/format_utils.dart';
 
 const _bg        = Color(0xFF0D0D0D);
@@ -26,6 +28,7 @@ class InsightsScreen extends ConsumerStatefulWidget {
 
 class _InsightsScreenState extends ConsumerState<InsightsScreen> {
   bool _loading = false;
+  InsightsSummaryModel? _summary; // live data from /v1/insights/summary
 
   InsightsModel get _insights =>
       ref.watch(appStateProvider).insights ?? InsightsModel.mock;
@@ -38,9 +41,17 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
 
   Future<void> _loadInsights() async {
     setState(() => _loading = true);
-    await Future.delayed(const Duration(milliseconds: 500));
-    // In production: call ApiService.instance.fetchInsights()
-    ref.read(appStateProvider.notifier).setInsights(InsightsModel.mock);
+    // Fetch live summary from Buddy API (best effort — never blocks UI)
+    try {
+      final summary = await BuddyApiService.instance.getInsightsSummary();
+      if (mounted) setState(() => _summary = summary);
+    } catch (_) {
+      // API unavailable — fall through to mock InsightsModel below
+    }
+    // Keep InsightsModel.mock as the detailed display model if API is down
+    if (ref.read(appStateProvider).insights == null) {
+      ref.read(appStateProvider.notifier).setInsights(InsightsModel.mock);
+    }
     if (mounted) setState(() => _loading = false);
   }
 
@@ -87,6 +98,9 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
   }
 
   Widget _buildScoreCard(InsightsModel ins) {
+    // Prefer live API score when available
+    final score = _summary?.productivityScore ?? ins.lifeOptimizationScore.toInt();
+    final scoreD = score.toDouble();
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 14),
       padding: const EdgeInsets.all(20),
@@ -99,45 +113,76 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: _verdigris.withOpacity(0.3)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('LIFE OPTIMIZATION SCORE',
-                    style: GoogleFonts.inter(
-                        fontSize: 10, fontWeight: FontWeight.w700,
-                        color: _textSec, letterSpacing: 1.5)),
-                const SizedBox(height: 8),
-                Text('${ins.lifeOptimizationScore.toInt()}',
-                    style: GoogleFonts.poppins(
-                        fontSize: 52, fontWeight: FontWeight.w700, color: _white,
-                        height: 1)),
-                const SizedBox(height: 4),
-                Text('out of 100',
-                    style: GoogleFonts.inter(fontSize: 13, color: _textSec)),
-              ],
-            ),
-          ),
-          // Score circle
-          Stack(
-            alignment: Alignment.center,
+          Row(
             children: [
-              SizedBox(
-                width: 80, height: 80,
-                child: CircularProgressIndicator(
-                  value: ins.lifeOptimizationScore / 100,
-                  strokeWidth: 7,
-                  backgroundColor: _border,
-                  valueColor: const AlwaysStoppedAnimation(_verdigris),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('PRODUCTIVITY SCORE',
+                        style: GoogleFonts.inter(
+                            fontSize: 10, fontWeight: FontWeight.w700,
+                            color: _textSec, letterSpacing: 1.5)),
+                    const SizedBox(height: 8),
+                    Text('$score',
+                        style: GoogleFonts.poppins(
+                            fontSize: 52, fontWeight: FontWeight.w700,
+                            color: _white, height: 1)),
+                    const SizedBox(height: 4),
+                    Text('out of 100',
+                        style: GoogleFonts.inter(fontSize: 13, color: _textSec)),
+                  ],
                 ),
               ),
-              Text('${ins.lifeOptimizationScore.toInt()}%',
-                  style: GoogleFonts.poppins(
-                      fontSize: 14, fontWeight: FontWeight.w700, color: _verdigris)),
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 80, height: 80,
+                    child: CircularProgressIndicator(
+                      value: (scoreD / 100).clamp(0, 1),
+                      strokeWidth: 7,
+                      backgroundColor: _border,
+                      valueColor: const AlwaysStoppedAnimation(_verdigris),
+                    ),
+                  ),
+                  Text('$score%',
+                      style: GoogleFonts.poppins(
+                          fontSize: 14, fontWeight: FontWeight.w700,
+                          color: _verdigris)),
+                ],
+              ),
             ],
           ),
+          // Weekly pattern from live API
+          if (_summary != null && _summary!.weeklyPattern.insightText.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _verdigris.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _verdigris.withOpacity(0.2)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.lightbulb_outline_rounded,
+                      color: _verdigris, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _summary!.weeklyPattern.insightText,
+                      style: GoogleFonts.inter(
+                          fontSize: 12, color: _textSec, height: 1.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -149,13 +194,22 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
       child: Row(
         children: [
           Expanded(child: _statCard(
-              'TIME SAVED', ins.timeSaved.displayWeekly, 'this week', _verdigris)),
+              'TIME SAVED',
+              _summary != null
+                  ? '${_summary!.hoursSavedEstimate.toStringAsFixed(1)}h'
+                  : ins.timeSaved.displayWeekly,
+              'this week', _verdigris)),
           const SizedBox(width: 10),
           Expanded(child: _statCard(
-              'DECISIONS', ins.decisions.total.toString(), 'handled', _chartreuse)),
+              'TASKS DONE',
+              _summary != null
+                  ? _summary!.tasksDone.toString()
+                  : ins.decisions.total.toString(),
+              'this month', _chartreuse)),
           const SizedBox(width: 10),
           Expanded(child: _statCard(
-              'RELIABILITY', ins.reliability.display, 'score', const Color(0xFFFF9F8A))),
+              'RELIABILITY', ins.reliability.display, 'score',
+              const Color(0xFFFF9F8A))),
         ],
       ),
     );

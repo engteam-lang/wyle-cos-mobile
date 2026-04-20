@@ -7,10 +7,15 @@ class AppConstants {
   static const String keyGoogleAccounts = 'wyle_google_accounts';
   static const String keyOutlookAccounts= 'wyle_outlook_accounts';
   static const String keyLastBriefKey   = 'wyle_last_brief_key';
-  static const String keyObligations    = 'wyle_obligations';
+  static const String keyObligations         = 'wyle_obligations';
+  static const String keyActiveConversation  = 'wyle_active_conversation_id';
+  static const String keyActionItems         = 'wyle_action_items';
 
   // ── API ──────────────────────────────────────────────────────────────────────
   static const String defaultApiUrl = 'http://localhost:3000/api';
+
+  /// Wyle backend (production). Override with BUDDY_API_URL in .env.
+  static const String buddyApiUrl   = 'https://api.wyle.ai';
 
   // ── Autonomy tiers ───────────────────────────────────────────────────────────
   static const List<Map<String, String>> autonomyTiers = [

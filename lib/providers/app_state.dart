@@ -5,6 +5,7 @@ import '../models/obligation_model.dart';
 import '../models/user_model.dart';
 import '../models/insights_model.dart';
 import '../models/morning_brief_model.dart';
+import '../models/action_item_model.dart';
 import '../constants/app_constants.dart';
 
 // ── App state model ───────────────────────────────────────────────────────────
@@ -21,6 +22,9 @@ class AppState {
   final List<String> googleAccounts;
   final List<String> outlookAccounts;
   final bool isLoading;
+  // ── Buddy API state ───────────────────────────────────────────────────────
+  final int? activeConversationId;   // last used chat conversation id from API
+  final List<ActionItemModel> actionItems; // live inbox from /v1/action-items
 
   const AppState({
     this.token,
@@ -35,6 +39,8 @@ class AppState {
     this.googleAccounts = const [],
     this.outlookAccounts = const [],
     this.isLoading = false,
+    this.activeConversationId,
+    this.actionItems = const [],
   });
 
   AppState copyWith({
@@ -50,20 +56,24 @@ class AppState {
     List<String>? googleAccounts,
     List<String>? outlookAccounts,
     bool? isLoading,
+    int? activeConversationId,
+    List<ActionItemModel>? actionItems,
   }) {
     return AppState(
-      token:           token           ?? this.token,
-      user:            user            ?? this.user,
-      isAuthenticated: isAuthenticated ?? this.isAuthenticated,
-      obligations:     obligations     ?? this.obligations,
-      insights:        insights        ?? this.insights,
-      morningBrief:    morningBrief    ?? this.morningBrief,
-      lastBriefKey:    lastBriefKey    ?? this.lastBriefKey,
-      googleConnected: googleConnected ?? this.googleConnected,
-      googleEmail:     googleEmail     ?? this.googleEmail,
-      googleAccounts:  googleAccounts  ?? this.googleAccounts,
-      outlookAccounts: outlookAccounts ?? this.outlookAccounts,
-      isLoading:       isLoading       ?? this.isLoading,
+      token:                 token                 ?? this.token,
+      user:                  user                  ?? this.user,
+      isAuthenticated:       isAuthenticated       ?? this.isAuthenticated,
+      obligations:           obligations           ?? this.obligations,
+      insights:              insights              ?? this.insights,
+      morningBrief:          morningBrief          ?? this.morningBrief,
+      lastBriefKey:          lastBriefKey          ?? this.lastBriefKey,
+      googleConnected:       googleConnected       ?? this.googleConnected,
+      googleEmail:           googleEmail           ?? this.googleEmail,
+      googleAccounts:        googleAccounts        ?? this.googleAccounts,
+      outlookAccounts:       outlookAccounts       ?? this.outlookAccounts,
+      isLoading:             isLoading             ?? this.isLoading,
+      activeConversationId:  activeConversationId  ?? this.activeConversationId,
+      actionItems:           actionItems           ?? this.actionItems,
     );
   }
 }
@@ -81,7 +91,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
     final userJson = prefs.getString(AppConstants.keyUser);
     final googleAccountsJson = prefs.getString(AppConstants.keyGoogleAccounts);
     final outlookAccountsJson= prefs.getString(AppConstants.keyOutlookAccounts);
-    final lastBriefKey = prefs.getString(AppConstants.keyLastBriefKey);
+    final lastBriefKey        = prefs.getString(AppConstants.keyLastBriefKey);
+    final activeConversation  = prefs.getInt(AppConstants.keyActiveConversation);
 
     UserModel? user;
     if (userJson != null) {
@@ -104,9 +115,10 @@ class AppStateNotifier extends StateNotifier<AppState> {
       isAuthenticated: token != null && user != null,
       googleAccounts:  googleAccounts,
       outlookAccounts: outlookAccounts,
-      googleConnected: googleAccounts.isNotEmpty,
-      googleEmail:     googleAccounts.isNotEmpty ? googleAccounts.first : '',
-      lastBriefKey:    lastBriefKey,
+      googleConnected:      googleAccounts.isNotEmpty,
+      googleEmail:          googleAccounts.isNotEmpty ? googleAccounts.first : '',
+      lastBriefKey:         lastBriefKey,
+      activeConversationId: activeConversation,
     );
   }
 
@@ -255,6 +267,36 @@ class AppStateNotifier extends StateNotifier<AppState> {
   // ── Loading ───────────────────────────────────────────────────────────────────
   void setLoading(bool loading) {
     state = state.copyWith(isLoading: loading);
+  }
+
+  // ── Active conversation ───────────────────────────────────────────────────────
+  Future<void> setActiveConversation(int conversationId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(AppConstants.keyActiveConversation, conversationId);
+    state = state.copyWith(activeConversationId: conversationId);
+  }
+
+  // ── Action items (from /v1/action-items) ──────────────────────────────────────
+  void setActionItems(List<ActionItemModel> items) {
+    state = state.copyWith(actionItems: items);
+  }
+
+  void addActionItem(ActionItemModel item) {
+    state = state.copyWith(actionItems: [item, ...state.actionItems]);
+  }
+
+  void markActionItemDone(int itemId) {
+    state = state.copyWith(
+      actionItems: state.actionItems
+          .map((i) => i.id == itemId ? i.copyWith(status: 'done') : i)
+          .toList(),
+    );
+  }
+
+  void removeActionItem(int itemId) {
+    state = state.copyWith(
+      actionItems: state.actionItems.where((i) => i.id != itemId).toList(),
+    );
   }
 }
 

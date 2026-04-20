@@ -5,6 +5,8 @@ import 'connect_screen.dart' show kProfileBg, kProfileCard, kProfileBorder, kPro
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../services/buddy_api_service.dart';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Calendar & Email connection screen
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,9 +28,34 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
   // ── Connection state ───────────────────────────────────────────────────────
   bool _gmailConnected   = false;
   bool _outlookConnected = false;
+  bool _gmailSyncing     = false;
+  bool _outlookSyncing   = false;
 
   static const _gmailEmail   = 'you@gmail.com';
   static const _outlookEmail = 'you@outlook.com';
+
+  // ── Connect helpers with API calls ─────────────────────────────────────────
+
+  Future<void> _connectGmail() async {
+    setState(() => _gmailSyncing = true);
+    try {
+      // Trigger demo sync-stub (real sync needs OAuth-linked account)
+      await BuddyApiService.instance.triggerEmailSyncStub(provider: 'gmail');
+    } catch (_) {
+      // API not reachable — still mark connected so UI works offline
+    } finally {
+      if (mounted) setState(() { _gmailConnected = true; _gmailSyncing = false; });
+    }
+  }
+
+  Future<void> _connectOutlook() async {
+    setState(() => _outlookSyncing = true);
+    try {
+      await BuddyApiService.instance.triggerEmailSyncStub(provider: 'microsoft');
+    } catch (_) { /* offline — ok */ } finally {
+      if (mounted) setState(() { _outlookConnected = true; _outlookSyncing = false; });
+    }
+  }
 
   @override
   void initState() {
@@ -208,9 +235,9 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
           if (!c) ...[
             const SizedBox(height: 16),
             _connectBtn(
-              label: 'Connect Gmail',
+              label: _gmailSyncing ? 'Connecting…' : 'Connect Gmail',
               color: const Color(0xFF22C55E),
-              onTap: () => setState(() => _gmailConnected = true),
+              onTap: _gmailSyncing ? null : _connectGmail,
             ),
           ] else ...[
             const SizedBox(height: 14),
@@ -302,9 +329,9 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
           if (!c) ...[
             const SizedBox(height: 16),
             _connectBtn(
-              label: 'Connect Outlook',
+              label: _outlookSyncing ? 'Connecting…' : 'Connect Outlook',
               color: const Color(0xFF3B82F6),
-              onTap: () => setState(() => _outlookConnected = true),
+              onTap: _outlookSyncing ? null : _connectOutlook,
             ),
           ] else ...[
             const SizedBox(height: 14),
