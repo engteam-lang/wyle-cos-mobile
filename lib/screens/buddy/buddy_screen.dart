@@ -649,40 +649,46 @@ Currency: AED. Context: Dubai, UAE.''';
       bottom: 16,
       child: Column(
         children: [
-          // Tasks FAB with badge
+          // ── Tasks FAB — green gradient + badge ─────────────────────────
           GestureDetector(
-            onTap: () => context.go(AppRoutes.obligations),
+            onTap: () => _showTasksBottomSheet(context, obligations),
             child: Stack(
               clipBehavior: Clip.none,
               children: [
                 Container(
-                  width: 50, height: 50,
+                  width: 52, height: 52,
                   decoration: BoxDecoration(
-                    color: _verdigris,
                     shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF1B998B), Color(0xFF52C878), Color(0xFFA8FF3E)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: _verdigris.withOpacity(0.4),
-                        blurRadius: 12, spreadRadius: 2,
+                        color: const Color(0xFF1B998B).withOpacity(0.45),
+                        blurRadius: 14, spreadRadius: 2,
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.format_list_bulleted_rounded,
-                      color: _white, size: 22),
+                  child: const Icon(Icons.checklist_rounded,
+                      color: _white, size: 24),
                 ),
                 if (obligations.isNotEmpty)
                   Positioned(
                     top: -4, right: -4,
                     child: Container(
-                      padding: const EdgeInsets.all(4),
+                      width: 20, height: 20,
                       decoration: const BoxDecoration(
                         color: _crimson, shape: BoxShape.circle,
                       ),
-                      child: Text(
-                        '${obligations.length > 9 ? '9+' : obligations.length}',
-                        style: GoogleFonts.inter(
-                            color: _white, fontSize: 9,
-                            fontWeight: FontWeight.w700),
+                      child: Center(
+                        child: Text(
+                          '${obligations.length > 9 ? '9+' : obligations.length}',
+                          style: GoogleFonts.inter(
+                              color: _white, fontSize: 9,
+                              fontWeight: FontWeight.w800),
+                        ),
                       ),
                     ),
                   ),
@@ -690,21 +696,49 @@ Currency: AED. Context: Dubai, UAE.''';
             ),
           ),
           const SizedBox(height: 12),
-          // History / back FAB
+          // ── History FAB — dark circle with teal border ─────────────────
           GestureDetector(
-            onTap: () => context.go(AppRoutes.home),
+            onTap: () => _showHistorySheet(context),
             child: Container(
               width: 46, height: 46,
               decoration: BoxDecoration(
-                color: _surfaceEl,
+                color: const Color(0xFF0A1A18),
                 shape: BoxShape.circle,
-                border: Border.all(color: _border),
+                border: Border.all(color: _verdigris.withOpacity(0.8), width: 1.5),
+                boxShadow: [
+                  BoxShadow(
+                    color: _verdigris.withOpacity(0.2),
+                    blurRadius: 8, spreadRadius: 1,
+                  ),
+                ],
               ),
-              child: Icon(Icons.history_rounded, color: _textSec, size: 20),
+              child: Icon(Icons.history_rounded,
+                  color: _verdigris.withOpacity(0.9), size: 22),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  // ── Tasks bottom sheet ────────────────────────────────────────────────────
+  void _showTasksBottomSheet(
+      BuildContext context, List<ObligationModel> obligations) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _TasksBottomSheet(obligations: obligations),
+    );
+  }
+
+  // ── Session history sheet ─────────────────────────────────────────────────
+  void _showHistorySheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _HistorySheet(messages: List.from(_messages)),
     );
   }
 
@@ -865,7 +899,9 @@ Currency: AED. Context: Dubai, UAE.''';
                   _attachedFile != null
                       ? Icons.attach_file_rounded
                       : Icons.add_rounded,
-                  color: _attachedFile != null ? _verdigris : _textSec,
+                  color: _attachedFile != null
+                      ? _verdigris
+                      : const Color(0xFFCB9A2D), // amber, matches Figma
                   size: 22,
                 ),
               ),
@@ -1294,6 +1330,380 @@ class _BlinkingDotState extends State<_BlinkingDot>
               color: _crimson.withOpacity(_fade.value * 0.6),
               blurRadius: 6, spreadRadius: 1)],
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tasks Bottom Sheet — Tasks + Insights tabs, urgent + active groups
+// ─────────────────────────────────────────────────────────────────────────────
+class _TasksBottomSheet extends StatefulWidget {
+  final List<ObligationModel> obligations;
+  const _TasksBottomSheet({required this.obligations});
+
+  @override
+  State<_TasksBottomSheet> createState() => _TasksBottomSheetState();
+}
+
+class _TasksBottomSheetState extends State<_TasksBottomSheet> {
+  int _tab = 0; // 0 = Tasks, 1 = Insights
+
+  @override
+  Widget build(BuildContext context) {
+    final urgent = widget.obligations
+        .where((o) => o.daysUntil <= 0 || o.risk == 'high')
+        .toList();
+    final active = widget.obligations
+        .where((o) => !(o.daysUntil <= 0 || o.risk == 'high'))
+        .toList();
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.78,
+      ),
+      decoration: const BoxDecoration(
+        color: Color(0xFF071512),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Handle ───────────────────────────────────────────────────────
+          const SizedBox(height: 12),
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A3E3B),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // ── Tab row ───────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                // Tasks tab
+                GestureDetector(
+                  onTap: () => setState(() => _tab = 0),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: _tab == 0
+                          ? const Color(0xFF0F3A30)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _tab == 0
+                            ? _verdigris.withOpacity(0.5)
+                            : Colors.transparent,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Text('Tasks',
+                            style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: _tab == 0 ? _verdigris : _textSec)),
+                        if (widget.obligations.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 20, height: 20,
+                            decoration: const BoxDecoration(
+                              color: _crimson, shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${widget.obligations.length}',
+                                style: GoogleFonts.inter(
+                                    color: _white, fontSize: 9,
+                                    fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Insights tab
+                GestureDetector(
+                  onTap: () => setState(() => _tab = 1),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 7),
+                    child: Text('Insights',
+                        style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: _tab == 1 ? _white : _textSec)),
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    width: 30, height: 30,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1A2E2B),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.close_rounded,
+                        color: Colors.white54, size: 16),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ── Content ───────────────────────────────────────────────────────
+          if (_tab == 0)
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                children: [
+                  if (urgent.isNotEmpty) ...[
+                    _sectionHeader(
+                      icon: Icons.error_outline_rounded,
+                      label: 'URGENT - NEXT 2 HOURS',
+                      color: const Color(0xFFFF5252),
+                    ),
+                    const SizedBox(height: 10),
+                    ...urgent.map((o) => _taskCard(o, isUrgent: true)),
+                    const SizedBox(height: 16),
+                  ],
+                  if (active.isNotEmpty) ...[
+                    _sectionHeader(
+                      icon: Icons.access_time_rounded,
+                      label: 'ACTIVE TASKS',
+                      color: _verdigris,
+                    ),
+                    const SizedBox(height: 10),
+                    ...active.map((o) => _taskCard(o, isUrgent: false)),
+                  ],
+                  if (widget.obligations.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      child: Center(
+                        child: Text('No active tasks',
+                            style: GoogleFonts.poppins(
+                                color: _textSec, fontSize: 14)),
+                      ),
+                    ),
+                ],
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Text('Insights coming soon',
+                    style: GoogleFonts.poppins(
+                        color: _textSec, fontSize: 14)),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionHeader({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 15),
+        const SizedBox(width: 7),
+        Text(label,
+            style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: color,
+                letterSpacing: 1.0)),
+      ],
+    );
+  }
+
+  Widget _taskCard(ObligationModel o, {required bool isUrgent}) {
+    final borderColor = isUrgent
+        ? const Color(0xFFFF5252).withOpacity(0.5)
+        : _verdigris.withOpacity(0.35);
+    final timeColor =
+        isUrgent ? const Color(0xFFFF9800) : _verdigris;
+    final actionIcon = o.executionPath == 'auto'
+        ? Icons.bolt_rounded
+        : Icons.access_time_rounded;
+    final timeText = o.daysUntil == 0
+        ? 'Due today'
+        : o.daysUntil < 0
+            ? 'Overdue'
+            : '${o.daysUntil}d';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0C1F1C),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: borderColor, width: 1.2),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${o.emoji} ${o.title}',
+                      style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: _white)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(Icons.access_time_rounded,
+                          color: timeColor, size: 12),
+                      const SizedBox(width: 4),
+                      Text(timeText,
+                          style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: timeColor,
+                              fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Icon(actionIcon, color: timeColor, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Session History Sheet
+// ─────────────────────────────────────────────────────────────────────────────
+class _HistorySheet extends StatelessWidget {
+  final List<ChatMessageModel> messages;
+  const _HistorySheet({required this.messages});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.70,
+      ),
+      decoration: const BoxDecoration(
+        color: Color(0xFF071512),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2A3E3B),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Text('Session History',
+                    style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: _white)),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: Container(
+                    width: 30, height: 30,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1A2E2B),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.close_rounded,
+                        color: Colors.white54, size: 16),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: messages.isEmpty
+                ? Center(
+                    child: Text('No messages yet',
+                        style: GoogleFonts.poppins(
+                            color: _textSec, fontSize: 14)),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    itemCount: messages.length,
+                    itemBuilder: (_, i) {
+                      final m = messages[i];
+                      final isUser = m.role == 'user';
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Align(
+                          alignment: isUser
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: Container(
+                            constraints: BoxConstraints(
+                              maxWidth:
+                                  MediaQuery.of(context).size.width * 0.75,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isUser
+                                  ? _verdigris.withOpacity(0.2)
+                                  : const Color(0xFF0F2420),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isUser
+                                    ? _verdigris.withOpacity(0.3)
+                                    : const Color(0xFF1F3A36),
+                              ),
+                            ),
+                            child: Text(
+                              m.content,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: isUser ? _white : _textSec,
+                                  height: 1.4),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
