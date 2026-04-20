@@ -574,8 +574,8 @@ class _GoogleGPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final cx = size.width  / 2;
     final cy = size.height / 2;
-    final outerR = size.width / 2 * 0.94;
-    final innerR = size.width / 2 * 0.50;
+    final outerR = size.width / 2 * 0.90;
+    final innerR = size.width / 2 * 0.54;
 
     // Google brand colours
     const blue   = Color(0xFF4285F4);
@@ -584,25 +584,24 @@ class _GoogleGPainter extends CustomPainter {
     const green  = Color(0xFF34A853);
 
     // ── Ring segments ─────────────────────────────────────────────────────────
-    // 0° = 3 o'clock, clockwise.
-    // Gap of 40° centred on 0° (right / equator): from 340° → 20°.
+    // 0° = 3 o'clock (right), clockwise. Gap of 36° centred on 0°: 342°→18°.
     //
-    //  Yellow:  20° →  67°  (47°)   lower-right
-    //  Green:   67° → 197°  (130°)  bottom + lower-left
-    //  Blue:   197° → 247°  (50°)   left side
-    //  Red:    247° → 340°  (93°)   upper-left → top → upper-right
-    //  [gap]:  340° → 380°  (40°)   ← opening of the G
-    _slice(canvas, cx, cy, outerR, innerR,  20,  47, yellow);
-    _slice(canvas, cx, cy, outerR, innerR,  67, 130, green);
-    _slice(canvas, cx, cy, outerR, innerR, 197,  50, blue);
-    _slice(canvas, cx, cy, outerR, innerR, 247,  93, red);
+    //  Green:   18° →  90°  (72°)   lower-right   (3→6 o'clock)
+    //  Yellow:  90° → 180°  (90°)   lower-left    (6→9 o'clock)
+    //  Red:    180° → 270°  (90°)   upper-left    (9→12 o'clock)
+    //  Blue:   270° → 342°  (72°)   upper-right   (12→3 o'clock)
+    //  [gap]:  342° → 18°   (36°)   ← opening of the G, filled by bar
+    _slice(canvas, cx, cy, outerR, innerR,  18,  72, green);
+    _slice(canvas, cx, cy, outerR, innerR,  90,  90, yellow);
+    _slice(canvas, cx, cy, outerR, innerR, 180,  90, red);
+    _slice(canvas, cx, cy, outerR, innerR, 270,  72, blue);
 
-    // ── Horizontal bar ────────────────────────────────────────────────────────
-    // Filled blue rectangle: centre → right edge, height = ring thickness.
+    // ── Horizontal bar (blue) ─────────────────────────────────────────────────
+    // Extends from centre outward to right edge, height = ring thickness.
     final thickness = outerR - innerR;
     canvas.drawRect(
       Rect.fromLTRB(cx, cy - thickness / 2, cx + outerR, cy + thickness / 2),
-      Paint()..color = blue..style = PaintingStyle.fill,
+      Paint()..color = blue..style = PaintingStyle.fill..isAntiAlias = true,
     );
   }
 
