@@ -166,12 +166,23 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
     );
   }
 
+  // ── Route map: label → destination ───────────────────────────────────────
+  void _handleRowTap(BuildContext context, String label) {
+    switch (label) {
+      case 'Calendar & Email':
+        context.push(AppRoutes.calendarEmail);
+        break;
+      default:
+        if (true) {} // coming soon
+    }
+  }
+
   // ── Single connection row ─────────────────────────────────────────────────
   Widget _buildRow(_ProfileSection s) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: GestureDetector(
-        onTap: s.onTap ?? () {},
+        onTap: s.onTap ?? () => _handleRowTap(context, s.label),
         behavior: HitTestBehavior.opaque,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),

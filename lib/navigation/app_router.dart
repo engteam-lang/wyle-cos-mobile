@@ -18,6 +18,7 @@ import '../screens/brain_dump/brain_dump_screen.dart';
 import '../screens/calendar/calendar_screen.dart';
 import '../screens/food/food_screen.dart';
 import '../screens/connect/connect_screen.dart';
+import '../screens/connect/calendar_email_screen.dart';
 import '../screens/brief/morning_brief_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/main/main_screen.dart';
@@ -41,6 +42,7 @@ class AppRoutes {
   static const calendar       = '/calendar';
   static const food           = '/food';
   static const connect        = '/main/connect';
+  static const calendarEmail  = '/calendar-email';
   static const morningBrief   = '/morning-brief';
   static const settings       = '/settings';
 }
@@ -138,6 +140,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: AppRoutes.calendar,     builder: (_, __) => const CalendarScreen()),
       GoRoute(path: AppRoutes.food,         builder: (_, __) => const FoodScreen()),
+      GoRoute(path: AppRoutes.calendarEmail, builder: (_, __) => const CalendarEmailScreen()),
       GoRoute(path: AppRoutes.morningBrief, builder: (_, __) => const MorningBriefScreen()),
       GoRoute(path: AppRoutes.settings,     builder: (_, __) => const SettingsScreen()),
     ],
