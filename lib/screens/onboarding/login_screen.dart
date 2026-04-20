@@ -169,9 +169,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   }) async {
     // Use API token if we have one; otherwise generate a local placeholder
     final token = apiToken ?? '${provider}_${DateTime.now().millisecondsSinceEpoch}';
+    // onboardingComplete: true — skips Preferences & Scan Obligations screens
     final user = UserModel(
       id: id, name: name, email: email,
-      onboardingComplete: false, onboardingStep: 1,
+      onboardingComplete: true, onboardingStep: 0,
       preferences: const UserPreferences(),
       autonomyTier: 1, insights: const UserInsights(),
     );
@@ -184,7 +185,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     _fetchBuddyProfile();
     if (mounted) {
       _clearLoading();
-      context.go(AppRoutes.preparation);
+      context.go(AppRoutes.main);
     }
   }
 
