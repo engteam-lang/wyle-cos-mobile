@@ -436,9 +436,9 @@ Currency: AED. Context: Dubai, UAE.''';
                   color: _textSec, size: 18),
             ),
           ),
-          // Profile avatar — navigates to Settings/Profile screen
+          // Profile avatar — navigates to Profile screen
           GestureDetector(
-            onTap: () => context.push(AppRoutes.settings),
+            onTap: () => context.go(AppRoutes.connect),
             child: _BuddyAvatar(gender: _avatarGender, size: 40),
           ),
         ],
