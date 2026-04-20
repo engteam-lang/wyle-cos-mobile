@@ -29,8 +29,9 @@ class MainScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final activeIndex = _currentIndex(context);
 
-    // Always show tab bar on all main screens
-    const showTabBar = true;
+    // Bottom nav bar disabled — Buddy chat is the primary landing screen
+    // const showTabBar = true;
+    const showTabBar = false;
 
     return Scaffold(
       backgroundColor: AppColors.bgDark,

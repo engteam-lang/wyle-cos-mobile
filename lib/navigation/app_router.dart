@@ -83,7 +83,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       };
 
       if (!isAuth && !onboardingRoutes.contains(loc)) {
-        return AppRoutes.welcome;
+        // Welcome screen disabled — go straight to login
+        // return AppRoutes.welcome;
+        return AppRoutes.login;
       }
       if (isAuth && !onboarded && onboardingRoutes.contains(loc) &&
           loc != AppRoutes.preferences &&
@@ -107,10 +109,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: AppRoutes.ready,          builder: (_, __) => const ReadyScreen()),
       GoRoute(path: AppRoutes.preparation,    builder: (_, __) => const PreparationScreen()),
 
-      // ── /main redirect → /main/home ──────────────────────────────────────────
+      // ── /main redirect → /main/buddy (Buddy chat is the landing page) ─────────
       GoRoute(
         path: AppRoutes.main,
-        redirect: (_, __) => AppRoutes.home,
+        redirect: (_, __) => AppRoutes.buddy,
       ),
 
       // ── Main shell (bottom tabs) ─────────────────────────────────────────────
