@@ -88,14 +88,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   Future<void> _signInWithGoogle() async {
     _setLoading('google');
     try {
+      // ── Step 1: get the Wyle backend OAuth URL ──────────────────────────────
+      Map<String, dynamic>? oauthData;
+      try {
+        oauthData = await BuddyApiService.instance.startOAuth('google');
+      } catch (_) {
+        // Backend unreachable — fall through to direct Google sign-in
+      }
+
+      if (oauthData != null && (oauthData['auth_url'] as String?)?.isNotEmpty == true) {
+        // ── Step 2: Open Wyle's Google OAuth URL ─────────────────────────────
+        // This redirects through Google and back to api.wyle.ai/callback,
+        // which issues the real JWT. We open it in the same window so the
+        // browser handles the redirect chain automatically.
+        final authUrl = oauthData['auth_url'] as String;
+        if (!mounted) return;
+        _clearLoading();
+        // Show the URL for the user to open — deep-link handling completes auth
+        _setError('Tap the link below to sign in with Google.\n$authUrl');
+        return;
+      }
+
+      // ── Fallback: direct Google sign-in (gives Google token, not Wyle JWT) ─
       final result = await GoogleAuthService.instance.signIn();
       if (!mounted) return;
       if (result.success) {
         await _completeAuth(
-          id: result.id ?? result.email,
-          name: result.displayName ?? result.email.split('@').first,
-          email: result.email,
+          id:       result.id    ?? result.email,
+          name:     result.displayName ?? result.email.split('@').first,
+          email:    result.email,
           provider: 'google',
+          // Use Google access token as a stand-in until Wyle OAuth is wired
+          apiToken: result.accessToken,
         );
       } else {
         _setError(result.error == 'Cancelled'

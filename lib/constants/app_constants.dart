@@ -15,7 +15,7 @@ class AppConstants {
   static const String defaultApiUrl = 'http://localhost:3000/api';
 
   /// Wyle backend (production). Override with BUDDY_API_URL in .env.
-  static const String buddyApiUrl   = 'https://api.wyle.ai';
+  static const String buddyApiUrl   = 'https://api.wyle.ai/v1';
 
   // ── Autonomy tiers ───────────────────────────────────────────────────────────
   static const List<Map<String, String>> autonomyTiers = [
