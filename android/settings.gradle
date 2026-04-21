@@ -15,15 +15,12 @@ pluginManagement {
         gradlePluginPortal()
     }
 
-    // ── Kotlin version lock ─────────────────────────────────────────────────
-    // Flutter's plugin-loader (includeBuild) bundles its own Kotlin version.
-    // resolutionStrategy.eachPlugin intercepts every plugin request — including
-    // those made from within the composite build — and redirects Kotlin to 2.2.0.
+    // Pin Kotlin plugin to 1.9.24 to match Flutter 3.29.3's bundled version.
     resolutionStrategy {
         eachPlugin {
             if (requested.id.id.startsWith("org.jetbrains.kotlin") ||
                 requested.id.id == "kotlin-android") {
-                useVersion "2.2.0"
+                useVersion "1.9.24"
             }
         }
     }
@@ -32,7 +29,7 @@ pluginManagement {
 plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
     id "com.android.application" version "8.3.0" apply false
-    id "org.jetbrains.kotlin.android" version "2.2.0" apply false
+    id "org.jetbrains.kotlin.android" version "1.9.24" apply false
 }
 
 include ":app"

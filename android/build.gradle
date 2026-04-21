@@ -1,10 +1,24 @@
 // Top-level build file.
-// Kotlin 2.2.0 is forced via three complementary mechanisms:
-//   1. buildscript classpath  — puts 2.2.0 compiler on the global build classpath
-//   2. settings.gradle resolutionStrategy.eachPlugin — intercepts plugin requests
-//   3. allprojects configurations — pins every kotlin-* artifact to 2.2.0
+//
+// ROOT CAUSE OF PREVIOUS FAILURES
+// ─────────────────────────────────────────────────────────────────────────────
+// Flutter 3.29.3 bundles Kotlin 1.9.x in its own composite-build
+// (flutter_tools/gradle).  Gradle's artifact-transform pipeline uses that same
+// 1.9.x Kotlin metadata reader to inspect every *.kotlin_module file produced
+// during the build.  When we forced the buildscript classpath to Kotlin 2.2.0,
+// the Flutter-plugin subprojects (flutter_tts, speech_to_text, etc.) compiled
+// with 2.2.0 and produced 2.2.0 metadata — which the 1.9.x transform reader
+// then rejected.  -Xskip-metadata-version-check only bypasses the *compiler*
+// step, not the Gradle transform step, so it didn't help.
+//
+// FIX
+// ─────────────────────────────────────────────────────────────────────────────
+// Pin Kotlin to 1.9.24 (the latest 1.9.x patch, compatible with Flutter 3.29.3).
+// This ensures every *.kotlin_module file produced in this build has 1.9.x
+// metadata, which the Flutter toolchain's 1.9.x reader can accept.
+
 buildscript {
-    ext.kotlin_version = '2.2.0'
+    ext.kotlin_version = '1.9.24'
     repositories {
         google()
         mavenCentral()
@@ -14,15 +28,14 @@ buildscript {
     }
 }
 
-// Force every subproject (app + Flutter plugin subprojects) to resolve
-// all org.jetbrains.kotlin:* artifacts at exactly 2.2.0, preventing
-// version splits between the compiler and stdlib.
+// Force every subproject to resolve all org.jetbrains.kotlin:* artifacts at
+// 1.9.24, even if a plugin's own build.gradle declares a higher version.
 allprojects {
     configurations.all {
         resolutionStrategy.eachDependency { DependencyResolveDetails details ->
             if (details.requested.group == 'org.jetbrains.kotlin') {
-                details.useVersion '2.2.0'
-                details.because 'Pin all Kotlin artifacts to compiler version 2.2.0'
+                details.useVersion '1.9.24'
+                details.because 'Pin to Flutter 3.29.3 toolchain Kotlin version'
             }
         }
     }
