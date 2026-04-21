@@ -32,10 +32,8 @@ dependencies:
   file_picker: ^8.1.2
 
   # Voice / Audio
-  record: ^5.1.2
   speech_to_text: ^7.3.0
   flutter_tts: ^4.0.2
-  just_audio: ^0.9.41
 
   # UI / Fonts
   google_fonts: ^6.2.1
