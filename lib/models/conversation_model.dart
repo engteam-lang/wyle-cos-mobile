@@ -2,13 +2,23 @@
 class ConversationModel {
   final int     id;
   final String? title;
+  /// ISO-8601 string — present when the backend includes it (not all versions do)
+  final String? createdAt;
+  final String? updatedAt;
 
-  const ConversationModel({required this.id, this.title});
+  const ConversationModel({
+    required this.id,
+    this.title,
+    this.createdAt,
+    this.updatedAt,
+  });
 
   factory ConversationModel.fromJson(Map<String, dynamic> j) =>
       ConversationModel(
-        id:    (j['id'] as num).toInt(),
-        title: j['title'] as String?,
+        id:        (j['id'] as num).toInt(),
+        title:     j['title']      as String?,
+        createdAt: j['created_at'] as String?,
+        updatedAt: j['updated_at'] as String?,
       );
 
   Map<String, dynamic> toJson() => {'id': id, 'title': title};
@@ -17,21 +27,24 @@ class ConversationModel {
 // ── Single message inside a conversation thread ────────────────────────────────
 /// Returned by GET /v1/chat/conversations/{id}/messages
 class ConversationMessageModel {
-  final int    id;
-  final String role;    // 'user' | 'assistant'
-  final String content;
+  final int     id;
+  final String  role;       // 'user' | 'assistant'
+  final String  content;
+  final String? createdAt;  // ISO-8601 if backend includes it
 
   const ConversationMessageModel({
     required this.id,
     required this.role,
     required this.content,
+    this.createdAt,
   });
 
   factory ConversationMessageModel.fromJson(Map<String, dynamic> j) =>
       ConversationMessageModel(
-        id:      (j['id'] as num).toInt(),
-        role:    j['role']    as String? ?? 'user',
-        content: j['content'] as String? ?? '',
+        id:        (j['id'] as num).toInt(),
+        role:      j['role']       as String? ?? 'user',
+        content:   j['content']    as String? ?? '',
+        createdAt: j['created_at'] as String?,
       );
 }
 

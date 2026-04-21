@@ -12,6 +12,7 @@ import '../screens/onboarding/preparation_screen.dart';
 import '../screens/home/home_screen.dart';
 import '../screens/obligations/obligations_screen.dart';
 import '../screens/buddy/buddy_screen.dart';
+import '../screens/buddy/session_history_screen.dart';
 import '../screens/wallet/wallet_screen.dart';
 import '../screens/insights/insights_screen.dart';
 import '../screens/brain_dump/brain_dump_screen.dart';
@@ -60,6 +61,7 @@ class AppRoutes {
   static const profileDevices      = '/profile/devices';
   static const profileBuddySettings= '/profile/buddy-settings';
   static const profileAutomation   = '/profile/automation';
+  static const sessionHistory      = '/session-history';
   static const morningBrief        = '/morning-brief';
   static const settings            = '/settings';
   static const authCallback        = '/auth-callback';
@@ -168,6 +170,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: AppRoutes.profileDevices,       builder: (_, __) => const DevicesHealthScreen()),
       GoRoute(path: AppRoutes.profileBuddySettings, builder: (_, __) => const BuddySettingsScreen()),
       GoRoute(path: AppRoutes.profileAutomation,    builder: (_, __) => const AutomationScreen()),
+      GoRoute(
+        path: AppRoutes.sessionHistory,
+        pageBuilder: (context, state) => const MaterialPage(
+          child: SessionHistoryScreen(),
+          fullscreenDialog: true,
+        ),
+      ),
       GoRoute(path: AppRoutes.morningBrief,  builder: (_, __) => const MorningBriefScreen()),
       GoRoute(path: AppRoutes.settings,     builder: (_, __) => const SettingsScreen()),
       // OAuth callback — Wyle backend redirects here with ?token=JWT after login

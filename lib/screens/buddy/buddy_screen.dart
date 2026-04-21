@@ -942,9 +942,9 @@ Currency: AED. Context: Dubai, UAE.''';
             ),
           ),
           const SizedBox(height: 12),
-          // ── History FAB — dark circle with teal border ─────────────────
+          // ── History FAB — navigates to full Session History screen ────────
           GestureDetector(
-            onTap: () => _showHistorySheet(context),
+            onTap: () => context.push(AppRoutes.sessionHistory),
             child: Container(
               width: 46, height: 46,
               decoration: BoxDecoration(
@@ -975,16 +975,6 @@ Currency: AED. Context: Dubai, UAE.''';
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => _TasksBottomSheet(obligations: obligations),
-    );
-  }
-
-  // ── Session history sheet ─────────────────────────────────────────────────
-  void _showHistorySheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _HistorySheet(messages: List.from(_messages)),
     );
   }
 
@@ -1836,120 +1826,6 @@ class _TasksBottomSheetState extends State<_TasksBottomSheet> {
             Icon(actionIcon, color: timeColor, size: 18),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Session History Sheet
-// ─────────────────────────────────────────────────────────────────────────────
-class _HistorySheet extends StatelessWidget {
-  final List<ChatMessageModel> messages;
-  const _HistorySheet({required this.messages});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.70,
-      ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF071512),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          const SizedBox(height: 12),
-          Center(
-            child: Container(
-              width: 36, height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A3E3B),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Text('Session History',
-                    style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: _white)),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
-                  child: Container(
-                    width: 30, height: 30,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF1A2E2B),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.close_rounded,
-                        color: Colors.white54, size: 16),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: messages.isEmpty
-                ? Center(
-                    child: Text('No messages yet',
-                        style: GoogleFonts.poppins(
-                            color: _textSec, fontSize: 14)),
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    itemCount: messages.length,
-                    itemBuilder: (_, i) {
-                      final m = messages[i];
-                      final isUser = m.role == 'user';
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Align(
-                          alignment: isUser
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: Container(
-                            constraints: BoxConstraints(
-                              maxWidth:
-                                  MediaQuery.of(context).size.width * 0.75,
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: isUser
-                                  ? _verdigris.withOpacity(0.2)
-                                  : const Color(0xFF0F2420),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: isUser
-                                    ? _verdigris.withOpacity(0.3)
-                                    : const Color(0xFF1F3A36),
-                              ),
-                            ),
-                            child: Text(
-                              m.content,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  color: isUser ? _white : _textSec,
-                                  height: 1.4),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
       ),
     );
   }
