@@ -30,6 +30,7 @@ import '../screens/connect/automation_screen.dart';
 import '../screens/brief/morning_brief_screen.dart';
 import '../screens/settings/settings_screen.dart';
 import '../screens/main/main_screen.dart';
+import '../screens/onboarding/auth_callback_screen.dart';
 
 // ── Route names ───────────────────────────────────────────────────────────────
 class AppRoutes {
@@ -60,7 +61,8 @@ class AppRoutes {
   static const profileBuddySettings= '/profile/buddy-settings';
   static const profileAutomation   = '/profile/automation';
   static const morningBrief        = '/morning-brief';
-  static const settings       = '/settings';
+  static const settings            = '/settings';
+  static const authCallback        = '/auth-callback';
 }
 
 // ── Auth change notifier ──────────────────────────────────────────────────────
@@ -98,6 +100,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         AppRoutes.splash, AppRoutes.welcome, AppRoutes.login,
         AppRoutes.preferences, AppRoutes.obligationScan,
         AppRoutes.ready, AppRoutes.preparation,
+        AppRoutes.authCallback,   // OAuth redirect — must be accessible unauthenticated
       };
 
       if (!isAuth && !onboardingRoutes.contains(loc)) {
@@ -165,8 +168,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: AppRoutes.profileDevices,       builder: (_, __) => const DevicesHealthScreen()),
       GoRoute(path: AppRoutes.profileBuddySettings, builder: (_, __) => const BuddySettingsScreen()),
       GoRoute(path: AppRoutes.profileAutomation,    builder: (_, __) => const AutomationScreen()),
-      GoRoute(path: AppRoutes.morningBrief,         builder: (_, __) => const MorningBriefScreen()),
+      GoRoute(path: AppRoutes.morningBrief,  builder: (_, __) => const MorningBriefScreen()),
       GoRoute(path: AppRoutes.settings,     builder: (_, __) => const SettingsScreen()),
+      // OAuth callback — Wyle backend redirects here with ?token=JWT after login
+      GoRoute(
+        path: AppRoutes.authCallback,
+        builder: (context, state) => AuthCallbackScreen(
+          token:  state.uri.queryParameters['token']
+               ?? state.uri.queryParameters['access_token'],
+          userId: state.uri.queryParameters['user_id']
+               ?? state.uri.queryParameters['user_public_id'],
+        ),
+      ),
     ],
   );
 });
