@@ -355,6 +355,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
   /// Marks obligations that the backend explicitly identified as completed.
   /// Matches by the stable `buddy_action_{id}` ID pattern.
+  /// Also persists status to the API so the change survives a re-login.
   void _processCompletedByBackend(List<int> ids) {
     final allObs = ref.read(appStateProvider).obligations;
     int count = 0;
@@ -365,6 +366,8 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       );
       if (ob != null) {
         ref.read(appStateProvider.notifier).resolveObligation(ob.id);
+        // Persist to backend — fire-and-forget, ignore errors (local state is source of truth for UX)
+        BuddyApiService.instance.markActionItemDone(backendId).catchError((_) {});
         count++;
       }
     }
@@ -372,8 +375,17 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   }
 
   /// Marks a single obligation as done and shows a confirmation toast.
+  /// Also persists status to the API so the change survives a re-login.
   void _markObligationDone(ObligationModel ob) {
     ref.read(appStateProvider.notifier).resolveObligation(ob.id);
+    // Extract the numeric backend ID from the stable 'buddy_action_{id}' format
+    // and persist the completion to the API.
+    if (ob.id.startsWith('buddy_action_')) {
+      final backendId = int.tryParse(ob.id.replaceFirst('buddy_action_', ''));
+      if (backendId != null) {
+        BuddyApiService.instance.markActionItemDone(backendId).catchError((_) {});
+      }
+    }
     if (mounted) _showCompletionSnackbar(1, title: ob.title);
   }
 

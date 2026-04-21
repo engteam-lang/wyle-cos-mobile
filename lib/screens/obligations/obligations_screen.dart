@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:wyle_cos/models/obligation_model.dart';
 import 'package:wyle_cos/providers/app_state.dart';
 import 'package:wyle_cos/services/ai_service.dart';
+import 'package:wyle_cos/services/buddy_api_service.dart';
 import 'package:wyle_cos/services/voice_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -168,6 +169,21 @@ class _ObligationsScreenState extends ConsumerState<ObligationsScreen> {
     return '${days}d';
   }
 
+  // ── helpers ─────────────────────────────────────────────────────────────────
+
+  /// Marks a `buddy_action_*` obligation as done both locally AND in the API.
+  /// For manually-added (non-API) items, only local state is updated.
+  void _resolveObligation(String id) {
+    ref.read(appStateProvider.notifier).updateObligation(
+        id, (o) => o.copyWith(status: 'completed'));
+    if (id.startsWith('buddy_action_')) {
+      final backendId = int.tryParse(id.replaceFirst('buddy_action_', ''));
+      if (backendId != null) {
+        BuddyApiService.instance.markActionItemDone(backendId).catchError((_) {});
+      }
+    }
+  }
+
   // ── modals ──────────────────────────────────────────────────────────────────
   void _showDetailModal(ObligationModel ob) {
     showModalBottomSheet(
@@ -177,8 +193,7 @@ class _ObligationsScreenState extends ConsumerState<ObligationsScreen> {
       builder: (_) => _DetailModal(
         obligation: ob,
         onMarkDone: () {
-          ref.read(appStateProvider.notifier).updateObligation(
-                ob.id, (o) => o.copyWith(status: 'completed'));
+          _resolveObligation(ob.id);
           Navigator.of(context).pop();
         },
       ),
@@ -214,20 +229,12 @@ class _ObligationsScreenState extends ConsumerState<ObligationsScreen> {
             ref.read(appStateProvider.notifier).addObligation(ob);
           }
         },
-        onResolve: (id) {
-          final ob = ref.read(appStateProvider).obligations
-              .firstWhere((o) => o.id == id, orElse: () => throw Exception());
-          ref.read(appStateProvider.notifier).updateObligation(
-              id, (o) => o.copyWith(status: 'completed'));
-        },
+        onResolve: (id) => _resolveObligation(id),
       ),
     );
   }
 
-  void _resolveCard(ObligationModel ob) {
-    ref.read(appStateProvider.notifier).updateObligation(
-        ob.id, (o) => o.copyWith(status: 'completed'));
-  }
+  void _resolveCard(ObligationModel ob) => _resolveObligation(ob.id);
 
   // ── build ───────────────────────────────────────────────────────────────────
   @override
