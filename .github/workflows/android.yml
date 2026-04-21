@@ -5,28 +5,30 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Prevents multiple builds from clashing
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
 
     steps:
-      # ── Checkout ─────────────────────────────────────────────────────────────
       - uses: actions/checkout@v4
 
-      # ── Java 17 (required for AGP 8.x) ───────────────────────────────────────
       - uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
+          cache: 'gradle' # Speeds up future builds
 
-      # ── Flutter ───────────────────────────────────────────────────────────────
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.29.3'
           channel: 'stable'
           cache: true
 
-      # ── Create .env (Flutter dotenv reads this at runtime) ───────────────────
       - name: Create .env file
         run: |
           cat > .env << 'EOF'
@@ -38,18 +40,17 @@ jobs:
           OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
           EOF
 
-      # ── Dependencies ──────────────────────────────────────────────────────────
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      # ── Build ─────────────────────────────────────────────────────────────────
       - name: Build release APK
-        run: flutter build apk --release --no-tree-shake-icons
+        run: |
+          flutter clean
+          flutter build apk --release --no-tree-shake-icons
 
-      # ── Upload artifact ───────────────────────────────────────────────────────
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: wyle-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/*.apk
           retention-days: 30
