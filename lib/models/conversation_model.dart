@@ -65,6 +65,11 @@ class ChatApiResponse {
   final String         assistantContent;
   final List<SuggestedAction> suggestedActions;
   final List<int>      persistedActionItemIds;
+  /// IDs of the user's existing action items that the backend wants to mark
+  /// as completed (e.g. when the user says "I paid the school fees").
+  /// Backend must populate this field; it is empty by default so older
+  /// backend versions are fully backward-compatible.
+  final List<int>      completedActionItemIds;
 
   const ChatApiResponse({
     required this.conversationId,
@@ -73,6 +78,7 @@ class ChatApiResponse {
     required this.assistantContent,
     required this.suggestedActions,
     required this.persistedActionItemIds,
+    this.completedActionItemIds = const [],
   });
 
   factory ChatApiResponse.fromJson(Map<String, dynamic> j) => ChatApiResponse(
@@ -84,6 +90,9 @@ class ChatApiResponse {
         .map((e) => SuggestedAction.fromJson(e as Map<String, dynamic>))
         .toList(),
     persistedActionItemIds: (j['persisted_action_item_ids'] as List? ?? [])
+        .map((e) => (e as num).toInt())
+        .toList(),
+    completedActionItemIds: (j['completed_action_item_ids'] as List? ?? [])
         .map((e) => (e as num).toInt())
         .toList(),
   );

@@ -33,6 +33,47 @@ const _textTer    = Color(0xFF4A4A4A);
 const _alertBg    = Color(0xFF1A0808);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Completion-intent helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Returns true if the utterance looks like "I finished / paid / completed …"
+bool _hasCompletionIntent(String text) {
+  final lower = text.toLowerCase();
+  const patterns = [
+    'i paid', 'i have paid', "i've paid",
+    'i completed', 'i have completed', "i've completed",
+    'i finished', 'i have finished', "i've finished",
+    'already paid', 'already done', 'already completed',
+    'mark as completed', 'mark as done', 'mark it as',
+    'done with', 'completed the', 'paid the', 'finished the',
+    'i did the', 'i have done', "i've done",
+    'remove the task', 'remove it from',
+  ];
+  return patterns.any((p) => lower.contains(p));
+}
+
+String _normalizeForMatch(String s) =>
+    s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9\s]'), '').trim();
+
+/// Fuzzy-matches the utterance against active obligations.
+/// Returns the best match or null.
+ObligationModel? _findObligationInUtterance(
+    String text, List<ObligationModel> obligations) {
+  final lower = _normalizeForMatch(text);
+  for (final ob in obligations) {
+    if (ob.status == 'completed') continue;
+    final words = _normalizeForMatch(ob.title)
+        .split(RegExp(r'\s+'))
+        .where((w) => w.length > 3)
+        .toList();
+    if (words.isEmpty) continue;
+    final matched = words.where((w) => lower.contains(w)).length;
+    if (matched / words.length >= 0.5) return ob;
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // BuddyScreen
 // ─────────────────────────────────────────────────────────────────────────────
 class BuddyScreen extends ConsumerStatefulWidget {
@@ -267,28 +308,102 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   /// Sends the message to the Wyle backend (/v1/chat/messages).
   /// Returns the assistant reply string, or null if the call fails
   /// (in which case the caller falls back to AiService).
-  /// Also processes any suggested_actions → adds them to the task list.
+  /// Handles both task creation (suggested_actions) and task completion
+  /// (completed_action_item_ids from backend, or client-side intent detection).
   Future<String?> _sendViaBuddyApi(String content) async {
+    // ── Client-side completion intent detection (works even without backend
+    //    support — acts as a reliable fallback).
+    final obligations = ref.read(appStateProvider).obligations;
+    final clientMatch = _hasCompletionIntent(content)
+        ? _findObligationInUtterance(content, obligations)
+        : null;
+
     try {
       final convId = ref.read(appStateProvider).activeConversationId;
       final apiResp = await BuddyApiService.instance.sendMessage(
         content:        content,
         conversationId: convId,
       );
+
       // Persist the conversation id so follow-up messages stay in the same thread
       if (apiResp.conversationId != convId) {
         await ref.read(appStateProvider.notifier)
             .setActiveConversation(apiResp.conversationId);
       }
+
+      // ── Backend-assisted completion (highest accuracy) ────────────────────
+      if (apiResp.completedActionItemIds.isNotEmpty) {
+        _processCompletedByBackend(apiResp.completedActionItemIds);
+      } else if (clientMatch != null) {
+        // ── Client-side fallback ──────────────────────────────────────────
+        _markObligationDone(clientMatch);
+      }
+
       // ── Auto-create tasks from suggested_actions ──────────────────────────
       if (apiResp.suggestedActions.isNotEmpty) {
         _processSuggestedActions(apiResp);
       }
+
       return apiResp.assistantContent;
     } catch (_) {
-      // API unavailable — silent fallback to AiService
+      // API unavailable — still apply client-side completion if detected,
+      // then fall back to AiService for the response.
+      if (clientMatch != null) _markObligationDone(clientMatch);
       return null;
     }
+  }
+
+  /// Marks obligations that the backend explicitly identified as completed.
+  /// Matches by the stable `buddy_action_{id}` ID pattern.
+  void _processCompletedByBackend(List<int> ids) {
+    final allObs = ref.read(appStateProvider).obligations;
+    int count = 0;
+    for (final backendId in ids) {
+      final ob = allObs.cast<ObligationModel?>().firstWhere(
+        (o) => o!.id == 'buddy_action_$backendId',
+        orElse: () => null,
+      );
+      if (ob != null) {
+        ref.read(appStateProvider.notifier).resolveObligation(ob.id);
+        count++;
+      }
+    }
+    if (count > 0 && mounted) _showCompletionSnackbar(count);
+  }
+
+  /// Marks a single obligation as done and shows a confirmation toast.
+  void _markObligationDone(ObligationModel ob) {
+    ref.read(appStateProvider.notifier).resolveObligation(ob.id);
+    if (mounted) _showCompletionSnackbar(1, title: ob.title);
+  }
+
+  void _showCompletionSnackbar(int count, {String? title}) {
+    final label = title != null
+        ? '✓  "${title}" marked as done'
+        : '✓  $count task${count == 1 ? '' : 's'} marked as done';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF0F3D35),
+        behavior:        SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 80, 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 3),
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: _verdigris, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.inter(
+                    fontSize: 13, color: _white,
+                    fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Converts each SuggestedAction in the API response into an ObligationModel
