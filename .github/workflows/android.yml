@@ -38,20 +38,27 @@ jobs:
           PROXY_URL=${{ secrets.PROXY_URL }}
           EOF
           
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.3'
+          channel: 'stable'
+      
       - name: Force Kotlin version
         run: |
           echo "kotlin.version=2.2.0" >> android/gradle.properties
           echo "ext.kotlin_version=2.2.0" >> android/gradle.properties
-                
-      - name: Override Kotlin version
-        run: echo "kotlin.version=2.2.0" >> android/gradle.properties
-
+      
       - name: Install dependencies
         run: flutter pub get
-
+      
       - name: Build release APK
         run: flutter build apk --release --no-tree-shake-icons
-
+  
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
