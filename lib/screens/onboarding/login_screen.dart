@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,6 +11,7 @@ import 'package:wyle_cos/providers/app_state.dart';
 import 'package:wyle_cos/models/user_model.dart';
 import 'package:wyle_cos/services/google_auth_service.dart';
 import 'package:wyle_cos/services/buddy_api_service.dart';
+import 'package:wyle_cos/constants/app_constants.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Login Screen — matches Figma design exactly
@@ -154,9 +156,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       final authUrl = data['auth_url'] as String?;
       if (!mounted) return;
       if (authUrl != null && authUrl.isNotEmpty) {
-        // Launch OAuth in platform browser; deep-link callback will complete auth.
-        // For now fall through to demo user if URL launch is unavailable.
-        _setError('Open this URL to sign in with Microsoft:\n$authUrl');
+        final launched = await launchUrl(
+          Uri.parse(authUrl),
+          mode: LaunchMode.platformDefault,
+        );
+        if (!launched && mounted) {
+          _setError('Could not open the Microsoft sign-in page. Try again.');
+        }
         _clearLoading();
         return;
       }
@@ -224,6 +230,208 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     }).catchError((_) { /* not yet linked — that's fine */ });
   }
 
+  // ── Manual token bypass (for when OAuth redirect isn't configured yet) ────
+
+  /// Opens a bottom sheet where the user can paste the JWT they see in the
+  /// browser after completing Google OAuth.  Calls GET /v1/users/me to verify
+  /// the token, then signs in directly — no redirect URL needed.
+  void _showTokenDialog() {
+    final ctrl = TextEditingController();
+    bool verifying = false;
+    String? dialogError;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheet) {
+            Future<void> submit() async {
+              final token = ctrl.text.trim();
+              if (token.isEmpty) {
+                setSheet(() => dialogError = 'Please paste your token first.');
+                return;
+              }
+              setSheet(() { verifying = true; dialogError = null; });
+
+              try {
+                // Temporarily persist the token so BuddyApiService can read it
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString(AppConstants.keyAuthToken, token);
+
+                // Verify token + fetch real profile
+                Map<String, dynamic>? profile;
+                try {
+                  profile = await BuddyApiService.instance.getMe();
+                } catch (_) { /* proceed with defaults */ }
+
+                final email    = profile?['email']     as String? ?? '';
+                final fullName = profile?['full_name'] as String?
+                              ?? email.split('@').first.isNotEmpty
+                                  ? email.split('@').first
+                                  : 'Wyle User';
+                final pubId    = profile?['public_id'] as String?
+                              ?? token.substring(0, token.length.clamp(0, 8));
+
+                final user = UserModel(
+                  id:                 pubId,
+                  name:               fullName,
+                  email:              email,
+                  onboardingComplete: true,
+                  onboardingStep:     0,
+                  preferences:        const UserPreferences(),
+                  autonomyTier:       1,
+                  insights:           const UserInsights(),
+                );
+
+                await ref.read(appStateProvider.notifier).setAuth(token, user);
+
+                if (mounted) {
+                  Navigator.of(sheetCtx).pop(); // close sheet
+                  context.go(AppRoutes.main);
+                }
+              } catch (e) {
+                setSheet(() {
+                  verifying    = false;
+                  dialogError  = 'Token verification failed. Check it and try again.';
+                });
+              }
+            }
+
+            return Padding(
+              // Lift sheet above keyboard
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(sheetCtx).viewInsets.bottom,
+              ),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFF0A2E38),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Handle bar
+                    Center(
+                      child: Container(
+                        width: 40, height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1C4A56),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Paste your access token',
+                      style: GoogleFonts.poppins(
+                        fontSize: 17, fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'After signing in with Google, copy the access_token '
+                      'value from the browser and paste it below.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12, color: const Color(0xFF7AACB8),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Token input field
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF001E29),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF1C4A56)),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: ctrl,
+                              autofocus: true,
+                              maxLines: 3,
+                              minLines: 1,
+                              style: GoogleFonts.sourceCodePro(
+                                fontSize: 12, color: Colors.white70,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: 'eyJ…',
+                                hintStyle: GoogleFonts.sourceCodePro(
+                                  fontSize: 12, color: const Color(0xFF4A7A85),
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.all(14),
+                              ),
+                            ),
+                          ),
+                          // Paste from clipboard shortcut
+                          IconButton(
+                            icon: const Icon(Icons.content_paste_rounded,
+                                color: Color(0xFF4A7A85), size: 20),
+                            tooltip: 'Paste',
+                            onPressed: () async {
+                              final data = await Clipboard.getData('text/plain');
+                              if (data?.text != null) {
+                                ctrl.text = data!.text!.trim();
+                                ctrl.selection = TextSelection.fromPosition(
+                                  TextPosition(offset: ctrl.text.length));
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (dialogError != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        dialogError!,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12, color: const Color(0xFFFF6B6B),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: verifying ? null : submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1B998B),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: verifying
+                            ? const SizedBox(
+                                width: 20, height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white))
+                            : Text(
+                                'Verify & Sign In',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 15, fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -270,7 +478,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     ],
                     const Spacer(flex: 3),
                     _stagger(5, _buildFooter()),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 12),
+                    // ── Manual token bypass (temporary until backend redirect is set up) ──
+                    GestureDetector(
+                      onTap: _showTokenDialog,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Text(
+                          'Already have a token?',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: const Color(0xFF2A6A78),
+                            decoration: TextDecoration.underline,
+                            decorationColor: const Color(0xFF2A6A78),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
