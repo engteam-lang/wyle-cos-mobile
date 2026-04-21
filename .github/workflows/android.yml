@@ -36,14 +36,16 @@ jobs:
       - name: Verify Flutter version
         run: flutter --version
 
-      # ── Android NDK ───────────────────────────────────────────────────────────
-      # Flutter 3.29.3 uses NDK 26.3.11579264 (flutter.ndkVersion).
-      # Pre-install it so Gradle doesn't have to auto-download it mid-build.
-      - name: Install required Android NDK
+      # ── Android SDK platform + NDK ────────────────────────────────────────────
+      # flutter_secure_storage and flutter_tts require compileSdk 36.
+      # Pre-install platform 36 AND NDK 26.3.11579264 (flutter.ndkVersion for
+      # Flutter 3.29.3) so Gradle doesn't auto-download them mid-build.
+      - name: Install Android SDK platform 36 and NDK
         run: |
           yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager \
             --licenses >/dev/null 2>&1 || true
           ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-36" \
             "ndk;26.3.11579264"
 
       # ── Create .env (Flutter dotenv reads this at runtime) ───────────────────
