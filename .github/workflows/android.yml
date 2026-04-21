@@ -38,6 +38,11 @@ jobs:
           PROXY_URL=${{ secrets.PROXY_URL }}
           EOF
           
+      - name: Force Kotlin version
+        run: |
+          echo "kotlin.version=2.2.0" >> android/gradle.properties
+          echo "ext.kotlin_version=2.2.0" >> android/gradle.properties
+                
       - name: Override Kotlin version
         run: echo "kotlin.version=2.2.0" >> android/gradle.properties
 
