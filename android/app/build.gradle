@@ -10,7 +10,9 @@ apply plugin: 'kotlin-android'
 
 android {
     namespace "com.wyle.wylecosapp"
-    compileSdk 36
+    // Use Flutter-recommended SDK levels so this always stays in sync with
+    // the Flutter version in use (avoids API-36 edge cases with current plugins).
+    compileSdk flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
 
     compileOptions {
@@ -29,7 +31,7 @@ android {
     defaultConfig {
         applicationId "com.wyle.wylecosapp"
         minSdk 24
-        targetSdk 36
+        targetSdk flutter.targetSdkVersion
         versionCode flutter.versionCode
         versionName flutter.versionName
     }

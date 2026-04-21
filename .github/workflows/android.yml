@@ -37,15 +37,14 @@ jobs:
         run: flutter --version
 
       # ── Android NDK ───────────────────────────────────────────────────────────
-      # Flutter 3.29.3 uses NDK 27.0.12077973; GitHub runners only ship
-      # 27.2.12479018 pre-installed.  When Gradle can't find the exact version
-      # it tries to auto-download it — install it explicitly to avoid that race.
+      # Flutter 3.29.3 uses NDK 26.3.11579264 (flutter.ndkVersion).
+      # Pre-install it so Gradle doesn't have to auto-download it mid-build.
       - name: Install required Android NDK
         run: |
           yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager \
             --licenses >/dev/null 2>&1 || true
           ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager \
-            "ndk;27.0.12077973"
+            "ndk;26.3.11579264"
 
       # ── Create .env (Flutter dotenv reads this at runtime) ───────────────────
       - name: Create .env file
@@ -87,11 +86,13 @@ jobs:
       - name: Show Gradle error output
         if: failure()
         run: |
-          echo "=== LAST 150 LINES OF BUILD LOG ==="
-          tail -150 /tmp/flutter-build.log || true
-          echo "=== GRADLE DAEMON LOGS ==="
-          find ~/.gradle/daemon -name "*.log" 2>/dev/null \
-            | sort -t/ -k1 | tail -2 | xargs tail -100 2>/dev/null || true
+          echo "=== LAST 200 LINES OF FLUTTER BUILD LOG ==="
+          tail -200 /tmp/flutter-build.log 2>/dev/null || true
+
+          echo ""
+          echo "=== GRADLE STACKTRACE (assembleRelease --stacktrace) ==="
+          cd android && ./gradlew assembleRelease --stacktrace --no-daemon \
+            2>&1 | tail -300 || true
 
       # ── Upload artifact ───────────────────────────────────────────────────────
       - name: Upload APK artifact
