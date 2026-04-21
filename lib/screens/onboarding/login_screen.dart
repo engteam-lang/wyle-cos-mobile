@@ -268,9 +268,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
                 final email    = profile?['email']     as String? ?? '';
                 final fullName = profile?['full_name'] as String?
-                              ?? email.split('@').first.isNotEmpty
+                              ?? (email.split('@').first.isNotEmpty
                                   ? email.split('@').first
-                                  : 'Wyle User';
+                                  : 'Wyle User');
                 final pubId    = profile?['public_id'] as String?
                               ?? token.substring(0, token.length.clamp(0, 8));
 
