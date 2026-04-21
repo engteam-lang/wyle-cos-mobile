@@ -7,6 +7,7 @@ import '../models/insights_model.dart';
 import '../models/morning_brief_model.dart';
 import '../models/action_item_model.dart';
 import '../constants/app_constants.dart';
+import '../services/buddy_api_service.dart';
 
 // ── App state model ───────────────────────────────────────────────────────────
 class AppState {
@@ -120,6 +121,9 @@ class AppStateNotifier extends StateNotifier<AppState> {
       lastBriefKey:         lastBriefKey,
       activeConversationId: activeConversation,
     );
+
+    // Re-hydrate tasks from the backend whenever we boot with a stored token.
+    if (token != null) loadObligationsFromApi();
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -128,6 +132,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
     await prefs.setString(AppConstants.keyAuthToken, token);
     await prefs.setString(AppConstants.keyUser, jsonEncode(user.toJson()));
     state = state.copyWith(token: token, user: user, isAuthenticated: true);
+    // Pull the user's persisted tasks from the backend right after login.
+    loadObligationsFromApi();
   }
 
   Future<void> logout() async {
@@ -184,6 +190,81 @@ class AppStateNotifier extends StateNotifier<AppState> {
     state = state.copyWith(
       obligations: state.obligations.map((o) =>
           o.id == id ? o.copyWith(status: 'completed') : o).toList(),
+    );
+  }
+
+  // ── Load from API ─────────────────────────────────────────────────────────────
+  /// Fetches all of the user's action items from GET /v1/action-items and
+  /// merges them into the obligations list.
+  ///
+  /// Strategy:
+  ///   • Non-API obligations (hardcoded demo items, manually added items) are
+  ///     kept unchanged.
+  ///   • All  buddy_action_*  obligations are replaced with fresh API data so
+  ///     status changes (e.g. done) are always reflected after login.
+  ///   • Silent fail: if the network call errors we just keep existing state.
+  Future<void> loadObligationsFromApi() async {
+    if (state.token == null) return;
+    try {
+      final items = await BuddyApiService.instance.getActionItems();
+      if (items.isEmpty) return;
+
+      final apiObs = items.map(_actionItemToObligation).toList();
+
+      // Keep everything that wasn't created by Buddy chat
+      final nonApiObs = state.obligations
+          .where((o) => !o.id.startsWith('buddy_action_'))
+          .toList();
+
+      // API items go at the top, then hardcoded/manual items
+      state = state.copyWith(obligations: [...apiObs, ...nonApiObs]);
+    } catch (_) {
+      // Network error — keep current state, don't show an error to the user
+    }
+  }
+
+  /// Converts a backend ActionItemModel → UI ObligationModel.
+  static ObligationModel _actionItemToObligation(ActionItemModel item) {
+    int daysUntil = 1;
+    String? noteText;
+
+    final dateStr = item.startsAt ?? item.remindAt;
+    if (dateStr != null) {
+      try {
+        final date = DateTime.parse(dateStr).toLocal();
+        daysUntil = date.difference(DateTime.now()).inDays;
+        final h    = date.hour % 12 == 0 ? 12 : date.hour % 12;
+        final min  = date.minute.toString().padLeft(2, '0');
+        final ampm = date.hour < 12 ? 'AM' : 'PM';
+        const months = [
+          'Jan','Feb','Mar','Apr','May','Jun',
+          'Jul','Aug','Sep','Oct','Nov','Dec',
+        ];
+        final dayLabel = daysUntil == 0 ? 'Today'
+                       : daysUntil == 1 ? 'Tomorrow'
+                       : '${months[date.month - 1]} ${date.day}';
+        noteText = '$dayLabel at $h:$min $ampm';
+      } catch (_) {}
+    }
+
+    final risk = daysUntil <= 0 ? 'high'
+               : daysUntil < 7  ? 'high'
+               : daysUntil < 30 ? 'medium'
+               : 'low';
+
+    final emoji = (item.kind == 'event' || item.kind == 'meeting') ? '📅' : '✅';
+
+    return ObligationModel(
+      id:            'buddy_action_${item.id}',
+      emoji:         emoji,
+      title:         item.title,
+      type:          'custom',
+      daysUntil:     daysUntil,
+      risk:          risk,
+      status:        item.status == 'done' ? 'completed' : 'active',
+      executionPath: 'Scheduled by Buddy',
+      notes:         noteText,
+      source:        item.source,
     );
   }
 
