@@ -1,2 +1,15 @@
-// Top-level build file. Configuration for sub-projects/modules.
-// Nothing to configure here — Flutter's plugin loader handles it.
+// Top-level build file.
+// The buildscript block forces Kotlin 2.2.0 onto the global classpath
+// BEFORE Flutter's plugin-loader (which runs during the settings phase)
+// can apply its bundled Kotlin 1.9.0.  This is the only reliable override
+// for Flutter composite builds that apply kotlin-android early.
+buildscript {
+    ext.kotlin_version = '2.2.0'
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
