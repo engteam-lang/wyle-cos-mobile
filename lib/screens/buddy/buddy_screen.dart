@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../../models/chat_message_model.dart';
+import '../../models/conversation_model.dart';
 import '../../models/obligation_model.dart';
 import '../../navigation/app_router.dart';
 import '../../providers/app_state.dart';
@@ -266,6 +267,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   /// Sends the message to the Wyle backend (/v1/chat/messages).
   /// Returns the assistant reply string, or null if the call fails
   /// (in which case the caller falls back to AiService).
+  /// Also processes any suggested_actions → adds them to the task list.
   Future<String?> _sendViaBuddyApi(String content) async {
     try {
       final convId = ref.read(appStateProvider).activeConversationId;
@@ -278,10 +280,110 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         await ref.read(appStateProvider.notifier)
             .setActiveConversation(apiResp.conversationId);
       }
+      // ── Auto-create tasks from suggested_actions ──────────────────────────
+      if (apiResp.suggestedActions.isNotEmpty) {
+        _processSuggestedActions(apiResp);
+      }
       return apiResp.assistantContent;
     } catch (_) {
       // API unavailable — silent fallback to AiService
       return null;
+    }
+  }
+
+  /// Converts each SuggestedAction in the API response into an ObligationModel
+  /// and adds them to the global obligations list.  Deduplication is handled
+  /// by addObligations (it skips items whose IDs already exist).
+  void _processSuggestedActions(ChatApiResponse resp) {
+    final toAdd = <ObligationModel>[];
+
+    for (int i = 0; i < resp.suggestedActions.length; i++) {
+      final action = resp.suggestedActions[i];
+      if (action.title.isEmpty) continue;
+
+      // Stable ID — uses the backend-persisted ID when available
+      final persistedId = i < resp.persistedActionItemIds.length
+          ? resp.persistedActionItemIds[i]
+          : null;
+      final id = persistedId != null
+          ? 'buddy_action_$persistedId'
+          : 'buddy_${DateTime.now().millisecondsSinceEpoch}_$i';
+
+      // Calculate daysUntil and build a human-readable "starts at" note
+      int daysUntil = 1;
+      String? noteText;
+      if (action.startsAt != null) {
+        try {
+          final start = DateTime.parse(action.startsAt!).toLocal();
+          daysUntil = start.difference(DateTime.now()).inDays;
+          final h    = start.hour % 12 == 0 ? 12 : start.hour % 12;
+          final min  = start.minute.toString().padLeft(2, '0');
+          final ampm = start.hour < 12 ? 'AM' : 'PM';
+          const months = [
+            'Jan','Feb','Mar','Apr','May','Jun',
+            'Jul','Aug','Sep','Oct','Nov','Dec',
+          ];
+          final day = daysUntil == 0 ? 'Today'
+                    : daysUntil == 1 ? 'Tomorrow'
+                    : '${months[start.month - 1]} ${start.day}';
+          noteText = '$day at $h:$min $ampm';
+        } catch (_) {}
+      }
+
+      final risk = daysUntil <= 0 ? 'high'
+                 : daysUntil < 7  ? 'high'
+                 : daysUntil < 30 ? 'medium'
+                 : 'low';
+
+      // Emoji: 📅 for events, ✅ for tasks
+      final emoji = action.kind == 'event' ? '📅' : '✅';
+
+      toAdd.add(ObligationModel(
+        id:            id,
+        emoji:         emoji,
+        title:         action.title,
+        type:          'custom',
+        daysUntil:     daysUntil,
+        risk:          risk,
+        status:        'active',
+        executionPath: 'Scheduled by Buddy',
+        notes:         noteText,
+        source:        'buddy',
+      ));
+    }
+
+    if (toAdd.isEmpty) return;
+
+    // addObligations skips IDs that already exist — safe to call repeatedly
+    ref.read(appStateProvider.notifier).addObligations(toAdd);
+
+    // Brief teal toast confirming how many tasks were added
+    if (mounted) {
+      final count = toAdd.length;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF0F3D35),
+          behavior:        SnackBarBehavior.floating,
+          // Right margin keeps the snackbar clear of the Tasks FAB
+          margin: const EdgeInsets.fromLTRB(16, 0, 80, 10),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 3),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_outline_rounded,
+                  color: _verdigris, size: 16),
+              const SizedBox(width: 8),
+              Text(
+                '${count == 1 ? '1 task' : '$count tasks'} added to your list',
+                style: GoogleFonts.inter(
+                    fontSize: 13, color: _white,
+                    fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      );
     }
   }
 
