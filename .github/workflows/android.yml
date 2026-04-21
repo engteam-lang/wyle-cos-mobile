@@ -37,6 +37,9 @@ jobs:
           EXPO_PUBLIC_OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
           PROXY_URL=${{ secrets.PROXY_URL }}
           EOF
+          
+      - name: Override Kotlin version
+        run: echo "kotlin.version=2.2.0" >> android/gradle.properties
 
       - name: Install dependencies
         run: flutter pub get
