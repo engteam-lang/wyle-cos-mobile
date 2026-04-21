@@ -1,8 +1,8 @@
 // Top-level build file.
-// The buildscript block forces Kotlin 2.2.0 onto the global classpath
-// BEFORE Flutter's plugin-loader (which runs during the settings phase)
-// can apply its bundled Kotlin 1.9.0.  This is the only reliable override
-// for Flutter composite builds that apply kotlin-android early.
+// Kotlin 2.2.0 is forced via three complementary mechanisms:
+//   1. buildscript classpath  — puts 2.2.0 compiler on the global build classpath
+//   2. settings.gradle resolutionStrategy.eachPlugin — intercepts plugin requests
+//   3. allprojects configurations — pins every kotlin-* artifact to 2.2.0
 buildscript {
     ext.kotlin_version = '2.2.0'
     repositories {
@@ -11,5 +11,19 @@ buildscript {
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+// Force every subproject (app + Flutter plugin subprojects) to resolve
+// all org.jetbrains.kotlin:* artifacts at exactly 2.2.0, preventing
+// version splits between the compiler and stdlib.
+allprojects {
+    configurations.all {
+        resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+            if (details.requested.group == 'org.jetbrains.kotlin') {
+                details.useVersion '2.2.0'
+                details.because 'Pin all Kotlin artifacts to compiler version 2.2.0'
+            }
+        }
     }
 }

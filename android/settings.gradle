@@ -14,6 +14,19 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+
+    // ── Kotlin version lock ─────────────────────────────────────────────────
+    // Flutter's plugin-loader (includeBuild) bundles its own Kotlin version.
+    // resolutionStrategy.eachPlugin intercepts every plugin request — including
+    // those made from within the composite build — and redirects Kotlin to 2.2.0.
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id.startsWith("org.jetbrains.kotlin") ||
+                requested.id.id == "kotlin-android") {
+                useVersion "2.2.0"
+            }
+        }
+    }
 }
 
 plugins {
