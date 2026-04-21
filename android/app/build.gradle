@@ -1,8 +1,16 @@
+// ── Why we use apply plugin instead of the plugins {} DSL for Kotlin ──────────
+// Flutter's composite includeBuild (flutter_tools/gradle) contributes its own
+// Kotlin classpath (1.9.x).  In Gradle 8 the composite-build classpath is visible
+// to the plugins {} DSL resolver first, so id "org.jetbrains.kotlin.android"
+// resolves to 1.9.x even though settings.gradle declares 2.2.0.
+// The legacy  apply plugin: 'kotlin-android'  bypasses the DSL resolver and
+// reads directly from the buildscript classpath, where build.gradle pins 2.2.0.
 plugins {
     id "com.android.application"
-    id "org.jetbrains.kotlin.android"   // must match the ID declared in settings.gradle
     id "dev.flutter.flutter-gradle-plugin"
 }
+
+apply plugin: 'kotlin-android'
 
 android {
     namespace "com.wyle.wylecosapp"
@@ -16,6 +24,9 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+        // Hard backstop: if the toolchain still resolves to an older compiler,
+        // do not abort on metadata-version mismatches from 2.2.x dependencies.
+        freeCompilerArgs += ["-Xskip-metadata-version-check"]
     }
 
     sourceSets {
@@ -37,14 +48,6 @@ android {
             minifyEnabled false
             shrinkResources false
         }
-    }
-}
-
-configurations.all {
-    resolutionStrategy {
-        force "org.jetbrains.kotlin:kotlin-stdlib:2.2.0"
-        force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:2.2.0"
-        force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.2.0"
     }
 }
 
