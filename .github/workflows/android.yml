@@ -32,6 +32,10 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # ── Verify Flutter (shows which binary is on PATH) ────────────────────────
+      - name: Verify Flutter version
+        run: flutter --version
+
       # ── Android NDK ───────────────────────────────────────────────────────────
       # Flutter 3.29.3 uses NDK 27.0.12077973; GitHub runners only ship
       # 27.2.12479018 pre-installed.  When Gradle can't find the exact version
@@ -60,13 +64,24 @@ jobs:
         run: flutter pub get
 
       # ── Build ─────────────────────────────────────────────────────────────────
-      # flutter clean ensures no stale build artefacts from previous runs.
-      # Pipe through tee so the full log is saved for the error step below.
+      # IMPORTANT: do NOT run `flutter clean` before this step.
+      # `flutter clean` deletes .dart_tool/ (Flutter's incremental build-state
+      # directory).  The Gradle plugin then calls `flutter --build-inputs-only`
+      # internally to rebuild that state, but in some environments the flutter
+      # binary it resolves to is older and doesn't recognise that flag, causing
+      # an immediate exit-64 failure ("option not found").
+      # In CI every run starts with a fresh workspace, so flutter clean is
+      # unnecessary and harmful here.
+      #
+      # NOTE: --build-inputs-only is an *internal* Flutter flag used only by
+      # the Gradle plugin.  Do NOT pass it on the command line — it makes Flutter
+      # print build inputs then exit 0 without producing an APK.
+      # Pipe through tee so the full log is saved for the error-display step.
       - name: Build release APK
         run: |
-          flutter clean
-          flutter pub get
-          flutter build apk --release --no-tree-shake-icons --verbose --build-inputs-only --no-daemon
+          set -o pipefail
+          flutter build apk --release --no-tree-shake-icons 2>&1 \
+            | tee /tmp/flutter-build.log
 
       # ── Show Gradle errors on failure ─────────────────────────────────────────
       - name: Show Gradle error output
