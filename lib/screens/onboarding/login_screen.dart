@@ -177,11 +177,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Future<void> _signInWithUAEPass() async {
     _setLoading('uaepass');
-    await Future.delayed(const Duration(milliseconds: 600));
-    // TODO: UAE Pass OAuth
-    await _completeAuth(
-      id: 'uae_demo', name: 'Demo User',
-      email: 'demo@uaepass.ae', provider: 'uaepass',
+    await Future.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+
+    _clearLoading();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'UAE Pass integration is in progress.',
+          style: GoogleFonts.poppins(fontSize: 13),
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF0F3D35),
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
@@ -509,10 +518,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   // ── Language pill ─────────────────────────────────────────────────────────
 
   Widget _buildLanguagePill() {
-    return GestureDetector(
-      onTap: () {
-        // TODO: show language picker
-      },
+    const languages = ['English', 'हिंदी', 'العربية'];
+
+    return PopupMenuButton<String>(
+      initialValue: _selectedLang,
+      onSelected: (value) => setState(() => _selectedLang = value),
+      color: const Color(0xFF003343),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: Color(0xFF1C4A56)),
+      ),
+      itemBuilder: (context) => languages
+          .map((lang) => PopupMenuItem<String>(
+                value: lang,
+                child: Text(
+                  lang,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: lang == _selectedLang
+                        ? FontWeight.w600
+                        : FontWeight.w500,
+                    color: lang == _selectedLang
+                        ? const Color(0xFF1B998B)
+                        : Colors.white,
+                  ),
+                ),
+              ))
+          .toList(),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
@@ -570,7 +603,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ).createShader(bounds),
               child: Image.asset(
                 'assets/logos/wyle_logo_white.png',
-                height: 80,
+                height: 92,
                 fit: BoxFit.contain,
               ),
             );
@@ -816,67 +849,70 @@ class _PressableButtonState extends State<_PressableButton>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Google "G" icon — filled donut-slice segments (no stroke bleed)
+// Google "G" icon — closer to official branded geometry
 // ─────────────────────────────────────────────────────────────────────────────
 class _GoogleIcon extends StatelessWidget {
   const _GoogleIcon();
   @override
   Widget build(BuildContext context) {
-    return SizedBox(width: 30, height: 30, child: CustomPaint(painter: _GoogleGPainter()));
+    return const SizedBox(
+      width: 28,
+      height: 28,
+      child: CustomPaint(painter: _GoogleGPainter()),
+    );
   }
 }
 
 class _GoogleGPainter extends CustomPainter {
-  // Draws one filled donut slice from startDeg to (startDeg+sweepDeg), clockwise.
-  void _slice(Canvas canvas, double cx, double cy,
-      double outerR, double innerR,
-      double startDeg, double sweepDeg, Color color) {
-    final s = startDeg * math.pi / 180;
-    final e = (startDeg + sweepDeg) * math.pi / 180;
-    final path = Path()
-      ..moveTo(cx + outerR * math.cos(s), cy + outerR * math.sin(s))
-      ..arcTo(Rect.fromCircle(center: Offset(cx, cy), radius: outerR),
-              s, e - s, false)
-      ..lineTo(cx + innerR * math.cos(e), cy + innerR * math.sin(e))
-      ..arcTo(Rect.fromCircle(center: Offset(cx, cy), radius: innerR),
-              e, s - e, false)
-      ..close();
-    canvas.drawPath(path,
-        Paint()..color = color..style = PaintingStyle.fill..isAntiAlias = true);
-  }
-
   @override
   void paint(Canvas canvas, Size size) {
-    final cx = size.width  / 2;
+    final cx = size.width / 2;
     final cy = size.height / 2;
-    final outerR = size.width / 2 * 0.90;
-    final innerR = size.width / 2 * 0.54;
+    final radius = math.min(size.width, size.height) / 2 * 0.84;
+    final strokeWidth = radius * 0.46;
 
     // Google brand colours
-    const blue   = Color(0xFF4285F4);
-    const red    = Color(0xFFEA4335);
+    const blue = Color(0xFF4285F4);
+    const red = Color(0xFFEA4335);
     const yellow = Color(0xFFFBBC05);
-    const green  = Color(0xFF34A853);
+    const green = Color(0xFF34A853);
 
-    // ── Ring segments ─────────────────────────────────────────────────────────
-    // 0° = 3 o'clock (right), clockwise. Gap of 36° centred on 0°: 342°→18°.
-    //
-    //  Green:   18° →  90°  (72°)   lower-right   (3→6 o'clock)
-    //  Yellow:  90° → 180°  (90°)   lower-left    (6→9 o'clock)
-    //  Red:    180° → 270°  (90°)   upper-left    (9→12 o'clock)
-    //  Blue:   270° → 342°  (72°)   upper-right   (12→3 o'clock)
-    //  [gap]:  342° → 18°   (36°)   ← opening of the G, filled by bar
-    _slice(canvas, cx, cy, outerR, innerR,  18,  72, green);
-    _slice(canvas, cx, cy, outerR, innerR,  90,  90, yellow);
-    _slice(canvas, cx, cy, outerR, innerR, 180,  90, red);
-    _slice(canvas, cx, cy, outerR, innerR, 270,  72, blue);
+    final arcPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.butt
+      ..strokeWidth = strokeWidth
+      ..isAntiAlias = true;
 
-    // ── Horizontal bar (blue) ─────────────────────────────────────────────────
-    // Extends from centre outward to right edge, height = ring thickness.
-    final thickness = outerR - innerR;
-    canvas.drawRect(
-      Rect.fromLTRB(cx, cy - thickness / 2, cx + outerR, cy + thickness / 2),
-      Paint()..color = blue..style = PaintingStyle.fill..isAntiAlias = true,
+    // Arc sequence and angles tuned to resemble Google's official "G".
+    void drawArc(Color color, double startDeg, double sweepDeg) {
+      arcPaint.color = color;
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset(cx, cy), radius: radius),
+        startDeg * math.pi / 180,
+        sweepDeg * math.pi / 180,
+        false,
+        arcPaint,
+      );
+    }
+
+    drawArc(red, -136, 108);
+    drawArc(yellow, -28, 58);
+    drawArc(green, 30, 108);
+    drawArc(blue, 138, 86);
+
+    // Signature horizontal blue bar.
+    final barHeight = strokeWidth * 0.42;
+    final barLeft = cx + radius * 0.04;
+    final barRight = cx + radius * 0.98;
+    final barRect = Rect.fromLTRB(
+      barLeft,
+      cy - barHeight / 2,
+      barRight,
+      cy + barHeight / 2,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(barRect, Radius.circular(barHeight / 2)),
+      Paint()..color = blue..isAntiAlias = true,
     );
   }
 

@@ -28,8 +28,9 @@ class VoiceService {
 
     await _tts.setLanguage('en-US');
     await _configureNaturalVoice();
-    await _tts.setPitch(1.0);
-    await _tts.setSpeechRate(0.85); // Fast — natural but brisk
+    // Softer, warmer delivery: less "assistant-like", more human.
+    await _tts.setPitch(1.08);
+    await _tts.setSpeechRate(0.46);
 
     // Complete the completer when TTS finishes naturally
     _tts.setCompletionHandler(() {
@@ -47,7 +48,7 @@ class VoiceService {
     });
   }
 
-  /// Prefer a natural-sounding female English voice when available.
+  /// Prefer a natural, warm female English voice when available.
   Future<void> _configureNaturalVoice() async {
     try {
       final dynamic rawVoices = await _tts.getVoices;
@@ -77,7 +78,9 @@ class VoiceService {
             name.contains('samantha') ||
             name.contains('zira') ||
             name.contains('aria') ||
-            name.contains('jenny')) {
+            name.contains('jenny') ||
+            name.contains('alloy') ||
+            name.contains('nova')) {
           score += 25;
         }
         if (name.contains('neural') ||
@@ -85,6 +88,9 @@ class VoiceService {
             name.contains('enhanced') ||
             name.contains('natural')) {
           score += 15;
+        }
+        if (name.contains('assistant') || name.contains('robot')) {
+          score -= 30;
         }
 
         if (score > bestScore) {

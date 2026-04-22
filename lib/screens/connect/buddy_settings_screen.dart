@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../providers/app_state.dart';
 import 'connect_screen.dart' show kProfileBg, kProfileCard, kProfileBorder, kProfileGradient;
 
 // ─────────────────────────────────────────────────────────────────────────────

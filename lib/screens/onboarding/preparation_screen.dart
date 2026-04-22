@@ -291,7 +291,7 @@ class _PreparationScreenState extends ConsumerState<PreparationScreen>
           opacity: 0.4,
           child: Image.asset(
             'assets/logos/wyle_logo_white.png',
-            height: 20,
+            height: 24,
             fit: BoxFit.contain,
           ),
         ),

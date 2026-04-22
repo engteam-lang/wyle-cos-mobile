@@ -126,7 +126,7 @@ class _SplashScreenState extends State<SplashScreen>
               // The logo image — constrained to 88 % of screen width
               child: Image.asset(
                 'assets/logos/wyle_splash.png',
-                width:    screenW * 0.88,
+                width:    screenW * 0.92,
                 fit:      BoxFit.contain,
               ),
             ),

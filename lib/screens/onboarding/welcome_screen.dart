@@ -91,7 +91,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       children: [
         Image.asset(
           'assets/logos/wyle_logo_white.png',
-          height: 48,
+          height: 56,
           fit: BoxFit.contain,
         ),
         const SizedBox(height: 8),
