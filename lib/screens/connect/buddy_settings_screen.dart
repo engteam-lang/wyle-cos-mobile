@@ -172,43 +172,39 @@ class _BuddySettingsScreenState extends ConsumerState<BuddySettingsScreen>
     );
   }
 
-  // Male avatar — cartoon boy icon
+  // Male avatar — real buddy image
   Widget _maleAvatar() {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Container(
-          width: 70, height: 70,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFF4FC3F7), Color(0xFF0277BD)],
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
-            ),
-          ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.asset(
+        'assets/avatars/buddy_male.png',
+        width: 74,
+        height: 74,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const Icon(
+          Icons.face_rounded,
+          color: Color(0xFF7EC8E3),
+          size: 42,
         ),
-        const Icon(Icons.face_rounded, color: Colors.white, size: 42),
-      ],
+      ),
     );
   }
 
-  // Female avatar — cartoon girl icon
+  // Female avatar — real buddy image
   Widget _femaleAvatar() {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Container(
-          width: 70, height: 70,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFFE8A5C8), Color(0xFF9C27B0)],
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
-            ),
-          ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.asset(
+        'assets/avatars/buddy_female.png',
+        width: 74,
+        height: 74,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const Icon(
+          Icons.face_3_rounded,
+          color: Color(0xFFE8A5C8),
+          size: 42,
         ),
-        const Icon(Icons.face_3_rounded, color: Colors.white, size: 42),
-      ],
+      ),
     );
   }
 
