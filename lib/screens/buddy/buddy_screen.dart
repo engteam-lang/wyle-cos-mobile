@@ -736,7 +736,10 @@ Currency: AED. Context: Dubai, UAE.''';
           ],
           const SizedBox(height: 10),
           GestureDetector(
-            onTap: () => context.go(AppRoutes.obligations),
+            onTap: () => _showTasksBottomSheet(
+              context,
+              ref.read(activeObligationsProvider),
+            ),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
@@ -1733,9 +1736,16 @@ class _TasksBottomSheetState extends State<_TasksBottomSheet> {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 32),
                       child: Center(
-                        child: Text('No active tasks',
-                            style: GoogleFonts.poppins(
-                                color: _textSec, fontSize: 14)),
+                        child: Text(
+                          'No active tasks at the moment.\n'
+                          'You are all caught up.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            color: _textSec,
+                            fontSize: 14,
+                            height: 1.5,
+                          ),
+                        ),
                       ),
                     ),
                 ],

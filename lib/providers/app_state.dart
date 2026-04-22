@@ -82,7 +82,7 @@ class AppState {
 
 // ── App state notifier ────────────────────────────────────────────────────────
 class AppStateNotifier extends StateNotifier<AppState> {
-  AppStateNotifier() : super(AppState(obligations: kInitialObligations)) {
+  AppStateNotifier() : super(const AppState()) {
     _loadPersistedState();
   }
 
@@ -141,7 +141,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(AppConstants.keyAuthToken);
     await prefs.remove(AppConstants.keyUser);
-    state = AppState(obligations: kInitialObligations);
+    state = const AppState();
   }
 
   void updateUser(UserModel user) {
@@ -199,8 +199,6 @@ class AppStateNotifier extends StateNotifier<AppState> {
   /// merges them into the obligations list.
   ///
   /// Strategy:
-  ///   • Non-API obligations (hardcoded demo items, manually added items) are
-  ///     kept unchanged.
   ///   • All  buddy_action_*  obligations are replaced with fresh API data so
   ///     status changes (e.g. done) are always reflected after login.
   ///   • Silent fail: if the network call errors we just keep existing state.
@@ -208,17 +206,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
     if (state.token == null) return;
     try {
       final items = await BuddyApiService.instance.getActionItems();
-      if (items.isEmpty) return;
-
       final apiObs = items.map(_actionItemToObligation).toList();
-
-      // Keep everything that wasn't created by Buddy chat
-      final nonApiObs = state.obligations
-          .where((o) => !o.id.startsWith('buddy_action_'))
-          .toList();
-
-      // API items go at the top, then hardcoded/manual items
-      state = state.copyWith(obligations: [...apiObs, ...nonApiObs]);
+      state = state.copyWith(obligations: apiObs);
     } catch (_) {
       // Network error — keep current state, don't show an error to the user
     }

@@ -185,11 +185,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       SnackBar(
         content: Text(
           'UAE Pass integration is in progress.',
-          style: GoogleFonts.poppins(fontSize: 13),
+          style: GoogleFonts.poppins(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
         ),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF0F3D35),
-        duration: const Duration(seconds: 2),
+        backgroundColor: const Color(0xFF0C1F1C),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: Color(0xFF1B998B), width: 1),
+        ),
+        duration: const Duration(seconds: 5),
       ),
     );
   }
@@ -868,8 +877,8 @@ class _GoogleGPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
     final cy = size.height / 2;
-    final radius = math.min(size.width, size.height) / 2 * 0.84;
-    final strokeWidth = radius * 0.46;
+    final radius = math.min(size.width, size.height) / 2 * 0.86;
+    final strokeWidth = radius * 0.50;
 
     // Google brand colours
     const blue = Color(0xFF4285F4);
@@ -883,7 +892,7 @@ class _GoogleGPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..isAntiAlias = true;
 
-    // Arc sequence and angles tuned to resemble Google's official "G".
+    // Arc sequence and angles tuned to match Google's official "G".
     void drawArc(Color color, double startDeg, double sweepDeg) {
       arcPaint.color = color;
       canvas.drawArc(
@@ -895,15 +904,15 @@ class _GoogleGPainter extends CustomPainter {
       );
     }
 
-    drawArc(red, -136, 108);
-    drawArc(yellow, -28, 58);
-    drawArc(green, 30, 108);
-    drawArc(blue, 138, 86);
+    drawArc(red, -40, 180);
+    drawArc(yellow, 140, 76);
+    drawArc(green, 216, 106);
+    drawArc(blue, 322, 64);
 
     // Signature horizontal blue bar.
-    final barHeight = strokeWidth * 0.42;
-    final barLeft = cx + radius * 0.04;
-    final barRight = cx + radius * 0.98;
+    final barHeight = strokeWidth * 0.56;
+    final barLeft = cx + radius * 0.05;
+    final barRight = cx + radius * 1.02;
     final barRect = Rect.fromLTRB(
       barLeft,
       cy - barHeight / 2,
