@@ -44,16 +44,15 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      # --web-renderer canvaskit: avoids the Skwasm renderer which requires
-      # Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy headers that
-      # GitHub Pages does not send (would cause a silent black screen).
+      # Flutter 3.29+ removed --web-renderer; CanvasKit is the default renderer.
+      # Do NOT pass --wasm — that switches to Skwasm which requires COOP/COEP
+      # headers that GitHub Pages does not send (silent black screen).
       # --no-tree-shake-icons: prevents icon font stripping issues.
       - name: Build web
         run: |
           flutter build web \
             --release \
             --base-href /wyle-cos-mobile/ \
-            --web-renderer canvaskit \
             --no-tree-shake-icons
 
       - name: Upload Pages artifact
