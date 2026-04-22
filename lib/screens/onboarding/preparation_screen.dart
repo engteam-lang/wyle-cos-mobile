@@ -287,13 +287,12 @@ class _PreparationScreenState extends ConsumerState<PreparationScreen>
   Widget _buildBrandTag() {
     return Column(
       children: [
-        Text(
-          'WYLE',
-          style: GoogleFonts.poppins(
-            fontSize: 18,
-            fontWeight: FontWeight.w200,
-            color: const Color(0xFFFEFFFE).withOpacity(0.4),
-            letterSpacing: 8,
+        Opacity(
+          opacity: 0.4,
+          child: Image.asset(
+            'assets/logos/wyle_logo_white.png',
+            height: 20,
+            fit: BoxFit.contain,
           ),
         ),
         const SizedBox(height: 4),

@@ -641,14 +641,10 @@ Currency: AED. Context: Dubai, UAE.''';
       child: Row(
         children: [
           // WYLE logo
-          Text(
-            'WYLE',
-            style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: _white,
-              letterSpacing: 1.5,
-            ),
+          Image.asset(
+            'assets/logos/wyle_logo_white.png',
+            height: 22,
+            fit: BoxFit.contain,
           ),
           const Spacer(),
           // Clear chat

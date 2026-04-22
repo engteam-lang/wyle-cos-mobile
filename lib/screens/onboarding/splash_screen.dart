@@ -67,31 +67,27 @@ class _SplashScreenState extends State<SplashScreen>
               AnimatedBuilder(
                 animation: _glowAnimation,
                 builder: (context, child) {
-                  return Text(
-                    'WYLE',
-                    style: GoogleFonts.poppins(
-                      fontSize: 72,
-                      fontWeight: FontWeight.w200,
-                      color: const Color(0xFFFEFFFE),
-                      letterSpacing: 20,
-                      shadows: [
-                        Shadow(
+                  return Container(
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
                           color: Color.fromRGBO(
-                            27, 153, 139,
-                            _glowAnimation.value,
-                          ),
-                          blurRadius: 32 * _glowAnimation.value,
-                          offset: Offset.zero,
+                              27, 153, 139, _glowAnimation.value * 0.85),
+                          blurRadius: 48 * _glowAnimation.value,
+                          spreadRadius: 4 * _glowAnimation.value,
                         ),
-                        Shadow(
+                        BoxShadow(
                           color: Color.fromRGBO(
-                            27, 153, 139,
-                            _glowAnimation.value * 0.6,
-                          ),
-                          blurRadius: 64 * _glowAnimation.value,
-                          offset: Offset.zero,
+                              27, 153, 139, _glowAnimation.value * 0.4),
+                          blurRadius: 96 * _glowAnimation.value,
+                          spreadRadius: 8 * _glowAnimation.value,
                         ),
                       ],
+                    ),
+                    child: Image.asset(
+                      'assets/logos/wyle_logo_white.png',
+                      height: 62,
+                      fit: BoxFit.contain,
                     ),
                   );
                 },

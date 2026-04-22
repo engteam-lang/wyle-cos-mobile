@@ -568,14 +568,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   1.0,
                 ],
               ).createShader(bounds),
-              child: Text(
-                'WYLE',
-                style: GoogleFonts.poppins(
-                  fontSize: 52,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  letterSpacing: 4,
-                ),
+              child: Image.asset(
+                'assets/logos/wyle_logo_white.png',
+                height: 52,
+                fit: BoxFit.contain,
               ),
             );
           },

@@ -89,21 +89,10 @@ class _WelcomeScreenState extends State<WelcomeScreen>
   Widget _buildLogo() {
     return Column(
       children: [
-        Text(
-          'WYLE',
-          style: GoogleFonts.poppins(
-            fontSize: 48,
-            fontWeight: FontWeight.w200,
-            color: const Color(0xFFFEFFFE),
-            letterSpacing: 14,
-            shadows: [
-              const Shadow(
-                color: Color(0x661B998B),
-                blurRadius: 24,
-                offset: Offset.zero,
-              ),
-            ],
-          ),
+        Image.asset(
+          'assets/logos/wyle_logo_white.png',
+          height: 48,
+          fit: BoxFit.contain,
         ),
         const SizedBox(height: 8),
         // Shimmer underline

@@ -63,3 +63,5 @@ flutter:
     - .env
     - assets/avatars/buddy_male.png
     - assets/avatars/buddy_female.png
+    - assets/logos/wyle_logo_white.png
+    - assets/logos/wyle_logo_teal.png
