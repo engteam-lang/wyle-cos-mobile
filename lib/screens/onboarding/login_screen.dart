@@ -855,7 +855,7 @@ class _GoogleIcon extends StatelessWidget {
   const _GoogleIcon();
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
+    return SizedBox(
       width: 28,
       height: 28,
       child: CustomPaint(painter: _GoogleGPainter()),
