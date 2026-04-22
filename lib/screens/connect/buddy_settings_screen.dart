@@ -21,11 +21,13 @@ class _BuddySettingsScreenState extends ConsumerState<BuddySettingsScreen>
   late Animation<double>   _fade;
   late Animation<Offset>   _slide;
 
-  String _selectedAvatar = 'Female'; // default matches Figma screenshot
+  String _selectedAvatar = 'Male';
 
   @override
   void initState() {
     super.initState();
+    _selectedAvatar =
+        ref.read(buddyAvatarGenderProvider) == 'female' ? 'Female' : 'Male';
     _ctrl  = AnimationController(vsync: this, duration: const Duration(milliseconds: 380))..forward();
     _fade  = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
     _slide = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)

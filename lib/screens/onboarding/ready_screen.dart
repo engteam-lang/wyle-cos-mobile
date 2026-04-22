@@ -69,7 +69,7 @@ class _ReadyScreenState extends ConsumerState<ReadyScreen>
 
   // ── "Let's get started" → show Quick Guide modal ──────────────────────────
   void _onGetStarted() {
-    final gender = _detectGender(ref.read(appStateProvider).user?.name ?? '');
+    final gender = ref.read(buddyAvatarGenderProvider);
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -102,8 +102,7 @@ class _ReadyScreenState extends ConsumerState<ReadyScreen>
 
   @override
   Widget build(BuildContext context) {
-    final gender = _detectGender(
-        ref.watch(appStateProvider).user?.name ?? '');
+    final gender = ref.watch(buddyAvatarGenderProvider);
 
     return Scaffold(
       body: Container(
@@ -313,20 +312,6 @@ class _ReadyScreenState extends ConsumerState<ReadyScreen>
     );
   }
 
-  // ── Gender detection ──────────────────────────────────────────────────────
-  String _detectGender(String name) {
-    const f = {
-      'sarah', 'emma', 'olivia', 'sophia', 'ava', 'isabella', 'mia',
-      'charlotte', 'amelia', 'harper', 'emily', 'elizabeth', 'mila', 'ella',
-      'avery', 'sofia', 'camila', 'aria', 'luna', 'chloe', 'penelope',
-      'layla', 'riley', 'zoey', 'nora', 'lily', 'eleanor', 'hannah',
-      'priya', 'aisha', 'fatima', 'noura', 'mariam', 'reem', 'sara',
-      'lena', 'dina', 'hana', 'dana', 'maya',
-    };
-    return f.contains(name.trim().split(' ').first.toLowerCase())
-        ? 'female'
-        : 'male';
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

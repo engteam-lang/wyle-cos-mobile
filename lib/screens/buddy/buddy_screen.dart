@@ -104,13 +104,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   late AnimationController _overlayCtrl;
   late Animation<double>   _overlayAnim;
 
-  // ── Gender for avatar ─────────────────────────────────────────────────────
-  // 'male' or 'female' — reads from user profile; defaults to male
-  String get _avatarGender {
-    final name = ref.read(appStateProvider).user?.name?.toLowerCase() ?? '';
-    // Simple heuristic: can be extended with a profile setting
-    return name.contains('she') || name.contains('her') ? 'female' : 'male';
-  }
+  String get _avatarGender => ref.watch(buddyAvatarGenderProvider);
 
   @override
   void initState() {

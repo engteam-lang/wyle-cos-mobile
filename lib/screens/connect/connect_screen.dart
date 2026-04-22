@@ -69,6 +69,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
     final state = ref.watch(appStateProvider);
     final user  = state.user;
     final name  = user?.name ?? 'User';
+    final gender = ref.watch(buddyAvatarGenderProvider);
     const role  = 'Founder & CEO';
 
     return Scaffold(
@@ -92,7 +93,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildUserCard(name, role),
+                          _buildUserCard(name, role, gender),
                           const SizedBox(height: 24),
 
                           // ── Connection category rows ───────────────────────
@@ -163,18 +164,18 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
   }
 
   // ── Avatar + name ──────────────────────────────────────────────────────────
-  Widget _buildUserCard(String name, String role) {
+  Widget _buildUserCard(String name, String role, String gender) {
+    final isMale = gender != 'female';
+    final assetPath = isMale
+        ? 'assets/avatars/buddy_male.png'
+        : 'assets/avatars/buddy_female.png';
     return Column(
       children: [
         Container(
           width: 80, height: 80,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const LinearGradient(
-              colors: [Color(0xFF1B998B), Color(0xFF0A4A44)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            color: const Color(0xFF0A2A38),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF1B998B).withOpacity(0.28),
@@ -182,11 +183,22 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
               ),
             ],
           ),
-          child: Center(
-            child: Text(
-              name.isNotEmpty ? name[0].toUpperCase() : 'W',
-              style: GoogleFonts.poppins(
-                  fontSize: 30, fontWeight: FontWeight.w700, color: Colors.white),
+          child: ClipOval(
+            child: Image.asset(
+              assetPath,
+              width: 80,
+              height: 80,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Center(
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : 'W',
+                  style: GoogleFonts.poppins(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
             ),
           ),
         ),

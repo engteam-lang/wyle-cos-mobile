@@ -8,6 +8,7 @@ import '../models/morning_brief_model.dart';
 import '../models/action_item_model.dart';
 import '../constants/app_constants.dart';
 import '../services/buddy_api_service.dart';
+import '../utils/avatar_gender.dart';
 
 // ── App state model ───────────────────────────────────────────────────────────
 class AppState {
@@ -402,4 +403,9 @@ final activeObligationsProvider = Provider<List<ObligationModel>>((ref) {
 
 final isAuthenticatedProvider = Provider<bool>((ref) {
   return ref.watch(appStateProvider).isAuthenticated;
+});
+
+final buddyAvatarGenderProvider = Provider<String>((ref) {
+  final user = ref.watch(appStateProvider).user;
+  return inferAvatarGender(name: user?.name, email: user?.email);
 });
