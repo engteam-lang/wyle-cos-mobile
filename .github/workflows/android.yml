@@ -36,17 +36,18 @@ jobs:
       - name: Verify Flutter version
         run: flutter --version
 
-      # ── Android SDK platform + NDK ────────────────────────────────────────────
+      # ── Android SDK platform + NDK + CMake ───────────────────────────────────
       # flutter_secure_storage and flutter_tts require compileSdk 36.
-      # Pre-install platform 36 AND NDK 26.3.11579264 (flutter.ndkVersion for
-      # Flutter 3.29.3) so Gradle doesn't auto-download them mid-build.
-      - name: Install Android SDK platform 36 and NDK
+      # flutter_tts uses C++ native code → needs CMake 3.22.1.
+      # Pre-install all three so nothing is auto-downloaded mid-build.
+      - name: Install Android SDK platform 36, NDK, and CMake
         run: |
           yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager \
             --licenses >/dev/null 2>&1 || true
           ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager \
             "platforms;android-36" \
-            "ndk;26.3.11579264"
+            "ndk;26.3.11579264" \
+            "cmake;3.22.1"
 
       # ── Create .env (Flutter dotenv reads this at runtime) ───────────────────
       - name: Create .env file
@@ -88,13 +89,19 @@ jobs:
       - name: Show Gradle error output
         if: failure()
         run: |
-          echo "=== LAST 200 LINES OF FLUTTER BUILD LOG ==="
-          tail -200 /tmp/flutter-build.log 2>/dev/null || true
+          echo "=== LAST 300 LINES OF FLUTTER BUILD LOG ==="
+          tail -300 /tmp/flutter-build.log 2>/dev/null || true
 
           echo ""
-          echo "=== GRADLE STACKTRACE (assembleRelease --stacktrace) ==="
-          cd android && ./gradlew assembleRelease --stacktrace --no-daemon \
-            2>&1 | tail -300 || true
+          echo "=== APK OUTPUT SEARCH ==="
+          find /home/runner/work -name "*.apk" 2>/dev/null || true
+
+          echo ""
+          echo "=== GRADLE STACKTRACE (assembleRelease --stacktrace --info) ==="
+          cd android && ./gradlew assembleRelease \
+            --stacktrace --info --no-daemon \
+            2>&1 | grep -E "(FAILED|ERROR|Exception|error:|warning:|> Task|BUILD)" \
+            | tail -400 || true
 
       # ── Upload artifact ───────────────────────────────────────────────────────
       - name: Upload APK artifact
