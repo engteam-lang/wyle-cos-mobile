@@ -8,6 +8,13 @@ plugins {
 // the plugins-DSL resolver where Flutter's composite-build can intercept it.
 apply plugin: 'kotlin-android'
 
+// Flutter's Gradle plugin normally redirects build output to
+// {project_root}/build/app/ so `flutter build apk` can locate the APK.
+// In some CI environments this redirect doesn't take effect, and Gradle
+// falls back to android/app/build/. Set it explicitly here to guarantee
+// the APK always lands where Flutter expects it.
+layout.buildDirectory = rootProject.layout.projectDirectory.dir("../build/app")
+
 android {
     namespace "com.wyle.wylecosapp"
     // compileSdk must be 36: flutter_secure_storage and flutter_tts both set

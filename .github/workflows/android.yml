@@ -79,11 +79,31 @@ jobs:
       # the Gradle plugin.  Do NOT pass it on the command line — it makes Flutter
       # print build inputs then exit 0 without producing an APK.
       # Pipe through tee so the full log is saved for the error-display step.
+      # flutter build apk occasionally reports "couldn't find .apk" even when
+      # Gradle succeeds because the plugin fails to redirect android/app/build/
+      # → build/app/ in CI.  We catch that case: if the APK landed in the Gradle
+      # default path instead, copy it to the Flutter-expected path so the upload
+      # step always works.
       - name: Build release APK
         run: |
-          set -o pipefail
           flutter build apk --release --no-tree-shake-icons 2>&1 \
-            | tee /tmp/flutter-build.log
+            | tee /tmp/flutter-build.log || true
+
+          FLUTTER_APK="build/app/outputs/flutter-apk/app-release.apk"
+          GRADLE_APK="android/app/build/outputs/flutter-apk/app-release.apk"
+
+          if [ -f "$FLUTTER_APK" ]; then
+            echo "✅ APK at Flutter path: $FLUTTER_APK"
+          elif [ -f "$GRADLE_APK" ]; then
+            echo "⚠️  APK at Gradle default path — copying to Flutter path"
+            mkdir -p "$(dirname "$FLUTTER_APK")"
+            cp "$GRADLE_APK" "$FLUTTER_APK"
+            echo "✅ APK normalised to: $FLUTTER_APK"
+          else
+            echo "❌ APK not found at either location — Gradle build failed"
+            tail -100 /tmp/flutter-build.log
+            exit 1
+          fi
 
       # ── Show Gradle errors on failure ─────────────────────────────────────────
       - name: Show Gradle error output
