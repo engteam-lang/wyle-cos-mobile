@@ -27,6 +27,7 @@ class VoiceService {
     );
 
     await _tts.setLanguage('en-US');
+    await _configureNaturalVoice();
     await _tts.setPitch(1.0);
     await _tts.setSpeechRate(0.85); // Fast — natural but brisk
 
@@ -44,6 +45,66 @@ class VoiceService {
       _speakCompleter?.complete();
       _speakCompleter = null;
     });
+  }
+
+  /// Prefer a natural-sounding female English voice when available.
+  Future<void> _configureNaturalVoice() async {
+    try {
+      final dynamic rawVoices = await _tts.getVoices;
+      if (rawVoices is! List) return;
+
+      final voices = rawVoices.whereType<dynamic>().toList();
+      Map<String, dynamic>? best;
+      int bestScore = -1;
+
+      for (final v in voices) {
+        if (v is! Map) continue;
+        final voice = v.map((k, value) => MapEntry('$k', value));
+
+        final locale = (voice['locale'] ?? voice['language'] ?? '')
+            .toString()
+            .toLowerCase();
+        if (!locale.startsWith('en')) continue;
+
+        final name = (voice['name'] ?? '').toString().toLowerCase();
+        final gender = (voice['gender'] ?? '').toString().toLowerCase();
+
+        var score = 0;
+        if (locale.startsWith('en-us')) score += 30;
+        if (gender.contains('female')) score += 40;
+        if (name.contains('female') ||
+            name.contains('woman') ||
+            name.contains('samantha') ||
+            name.contains('zira') ||
+            name.contains('aria') ||
+            name.contains('jenny')) {
+          score += 25;
+        }
+        if (name.contains('neural') ||
+            name.contains('wavenet') ||
+            name.contains('enhanced') ||
+            name.contains('natural')) {
+          score += 15;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          best = voice;
+        }
+      }
+
+      if (best != null) {
+        final selectedName = best['name']?.toString();
+        final selectedLocale =
+            (best['locale'] ?? best['language'])?.toString();
+        await _tts.setVoice({
+          if (selectedName != null) 'name': selectedName,
+          if (selectedLocale != null) 'locale': selectedLocale,
+        });
+      }
+    } catch (_) {
+      // Keep defaults if voice enumeration is not supported on this device.
+    }
   }
 
   bool get isListening => _isListening;
