@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,11 +9,25 @@ import 'theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // On web, surface any uncaught Flutter errors to the browser console so
+  // blank-screen issues are visible even in release builds.
+  if (kIsWeb) {
+    FlutterError.onError = (details) {
+      FlutterError.presentError(details);
+      // ignore: avoid_print
+      print('[Flutter error] ${details.exceptionAsString()}\n${details.stack}');
+    };
+  }
+
   // Load .env file (API keys)
   try {
     await dotenv.load(fileName: '.env');
-  } catch (_) {
+  } catch (e) {
     // .env not found — proceed without it (keys can be set via env vars)
+    if (kIsWeb) {
+      // ignore: avoid_print
+      print('[Wyle] dotenv load failed: $e — continuing with default config');
+    }
   }
 
   // Status bar styling

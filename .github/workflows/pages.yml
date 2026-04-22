@@ -20,31 +20,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Pin to the same Flutter version as the Android build for consistency.
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.2'
+          flutter-version: '3.29.3'
           channel: 'stable'
+          cache: true
 
+      # Create .env using printf (same pattern as android.yml) so there is no
+      # heredoc indentation and keys match what the Flutter app actually reads.
       - name: Create .env file
         run: |
-          cat > .env << 'EOF'
-          EXPO_PUBLIC_API_URL=${{ secrets.API_URL || 'http://localhost:3000/api' }}
-          EXPO_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
-          EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID=${{ secrets.GOOGLE_CLIENT_ID_ANDROID }}
-          EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS=${{ secrets.GOOGLE_CLIENT_ID_IOS }}
-          EXPO_PUBLIC_ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
-          EXPO_PUBLIC_OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          EXPO_PUBLIC_GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
-          EXPO_PUBLIC_GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-          EXPO_PUBLIC_OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
-          PROXY_URL=${{ secrets.PROXY_URL }}
-          EOF
+          printf '%s\n' \
+            "API_URL=${{ secrets.API_URL }}" \
+            "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" \
+            "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" \
+            "GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}" \
+            "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
+            "OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}" \
+            "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" \
+            > .env
 
-      - name: Install dependencies
+      - name: Get Flutter dependencies
         run: flutter pub get
 
+      # --web-renderer canvaskit: avoids the Skwasm renderer which requires
+      # Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy headers that
+      # GitHub Pages does not send (would cause a silent black screen).
+      # --no-tree-shake-icons: prevents icon font stripping issues.
       - name: Build web
-        run: flutter build web --base-href /wyle-cos-mobile/
+        run: |
+          flutter build web \
+            --release \
+            --base-href /wyle-cos-mobile/ \
+            --web-renderer canvaskit \
+            --no-tree-shake-icons
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

@@ -1,5 +1,9 @@
-import 'dart:io';
 import 'dart:typed_data';
+
+// dart:io's Platform class is not available on Flutter Web.
+// Use Flutter's defaultTargetPlatform instead (works everywhere).
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
 import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -95,7 +99,9 @@ class BuddyApiService {
     String? platform,
   }) async {
     final String plat = platform ??
-        (Platform.isAndroid ? 'android' : 'ios');
+        (!kIsWeb && defaultTargetPlatform == TargetPlatform.android
+            ? 'android'
+            : 'ios');
     await _dio.post('/users/me/device', data: {
       'fcm_token': fcmToken,
       'platform':  plat,
