@@ -1,11 +1,14 @@
 import 'dart:math' as math;
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import 'package:wyle_cos/navigation/app_router.dart';
 import 'package:wyle_cos/providers/app_state.dart';
 import 'package:wyle_cos/models/user_model.dart';
@@ -100,17 +103,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       final authUrl = oauthData?['auth_url'] as String?;
 
       if (authUrl != null && authUrl.isNotEmpty) {
-        // ── Step 2: auto-launch the URL — no text shown on screen ────────────
-        // The browser opens Google login → Google redirects to api.wyle.ai
-        // callback → Wyle issues JWT → redirects to /#/auth-callback?token=JWT
-        final launched = await launchUrl(
-          Uri.parse(authUrl),
-          mode: LaunchMode.platformDefault,   // same tab on web, browser on mobile
-        );
-        if (!launched && mounted) {
-          _setError('Could not open the sign-in page. Try again.');
+        // Web keeps browser redirect flow. Mobile uses in-app WebView to capture
+        // callback token and complete login without manual copy/paste.
+        if (kIsWeb) {
+          final launched = await launchUrl(
+            Uri.parse(authUrl),
+            mode: LaunchMode.platformDefault,
+          );
+          if (!launched && mounted) {
+            _setError('Could not open the sign-in page. Try again.');
+          }
+          _clearLoading();
+          return;
         }
-        // Auth completes in AuthCallbackScreen when the redirect lands
+
+        final oauthResult = await Navigator.of(context).push<_OAuthCaptureResult>(
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => _GoogleOAuthWebViewScreen(initialUrl: authUrl),
+          ),
+        );
+
+        if (!mounted) return;
+        if (oauthResult != null && oauthResult.token.isNotEmpty) {
+          await _completeOAuthTokenSignIn(
+            oauthResult.token,
+            userId: oauthResult.userId,
+          );
+          _clearLoading();
+          return;
+        }
+
+        _setError('Google sign-in was cancelled. Please try again.');
         _clearLoading();
         return;
       }
@@ -136,6 +160,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     } finally {
       _clearLoading();
     }
+  }
+
+  Future<void> _completeOAuthTokenSignIn(
+    String token, {
+    String? userId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(AppConstants.keyAuthToken, token);
+
+    Map<String, dynamic>? profile;
+    try {
+      profile = await BuddyApiService.instance.getMe();
+    } catch (_) {
+      // Proceed with best-effort fallback profile if /users/me fails.
+    }
+
+    final email = profile?['email'] as String? ?? '';
+    final fullName = profile?['full_name'] as String? ??
+        (email.split('@').first.isNotEmpty ? email.split('@').first : 'Wyle User');
+    final publicId = profile?['public_id'] as String? ??
+        userId ??
+        token.substring(0, token.length.clamp(0, 8));
+
+    final user = UserModel(
+      id: publicId,
+      name: fullName,
+      email: email,
+      onboardingComplete: true,
+      onboardingStep: 0,
+      preferences: const UserPreferences(),
+      autonomyTier: 1,
+      insights: const UserInsights(),
+    );
+
+    await ref.read(appStateProvider.notifier).setAuth(token, user);
+    if (mounted) context.go(AppRoutes.main);
   }
 
   Future<void> _signInWithApple() async {
@@ -927,6 +987,116 @@ class _GoogleGPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter old) => false;
+}
+
+class _OAuthCaptureResult {
+  final String token;
+  final String? userId;
+  const _OAuthCaptureResult({
+    required this.token,
+    this.userId,
+  });
+}
+
+class _GoogleOAuthWebViewScreen extends StatefulWidget {
+  final String initialUrl;
+  const _GoogleOAuthWebViewScreen({required this.initialUrl});
+
+  @override
+  State<_GoogleOAuthWebViewScreen> createState() => _GoogleOAuthWebViewScreenState();
+}
+
+class _GoogleOAuthWebViewScreenState extends State<_GoogleOAuthWebViewScreen> {
+  late final WebViewController _controller;
+  bool _isCapturing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (request) {
+            _tryFinishWithRaw(request.url);
+            return NavigationDecision.navigate;
+          },
+          onPageFinished: (url) async {
+            _tryFinishWithRaw(url);
+            if (_isCapturing) return;
+            try {
+              final body = await _controller.runJavaScriptReturningResult(
+                'document.body ? document.body.innerText : ""',
+              );
+              _tryFinishWithRaw(_normalizeJsResult(body));
+            } catch (_) {}
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(widget.initialUrl));
+  }
+
+  void _tryFinishWithRaw(String raw) {
+    if (_isCapturing) return;
+    final result = _extractOAuthResult(raw);
+    if (result == null) return;
+    _isCapturing = true;
+    if (!mounted) return;
+    Navigator.of(context).pop(result);
+  }
+
+  static String _normalizeJsResult(Object jsValue) {
+    final s = jsValue.toString().trim();
+    if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {
+      try {
+        final decoded = jsonDecode(s);
+        if (decoded is String) return decoded;
+      } catch (_) {}
+    }
+    return s;
+  }
+
+  static _OAuthCaptureResult? _extractOAuthResult(String raw) {
+    if (raw.isEmpty) return null;
+
+    try {
+      final uri = Uri.parse(raw);
+      final token = uri.queryParameters['token'] ?? uri.queryParameters['access_token'];
+      final userId = uri.queryParameters['user_id'] ?? uri.queryParameters['user_public_id'];
+      if (token != null && token.isNotEmpty) {
+        return _OAuthCaptureResult(token: token, userId: userId);
+      }
+    } catch (_) {}
+
+    final tokenMatch = RegExp(r'"(?:access_token|token)"\s*:\s*"([^"]+)"')
+        .firstMatch(raw);
+    if (tokenMatch != null) {
+      final token = tokenMatch.group(1)!;
+      final userIdMatch =
+          RegExp(r'"(?:user_public_id|user_id)"\s*:\s*"([^"]+)"').firstMatch(raw);
+      return _OAuthCaptureResult(
+        token: token,
+        userId: userIdMatch?.group(1),
+      );
+    }
+
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF001E29),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF001E29),
+        title: Text(
+          'Google Sign-In',
+          style: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+      ),
+      body: WebViewWidget(controller: _controller),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

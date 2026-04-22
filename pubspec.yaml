@@ -46,6 +46,7 @@ dependencies:
   permission_handler: ^11.3.1
   connectivity_plus: ^6.0.5
   flutter_dotenv: ^5.2.1
+  webview_flutter: ^4.10.0
 
   # Icons
   cupertino_icons: ^1.0.8
