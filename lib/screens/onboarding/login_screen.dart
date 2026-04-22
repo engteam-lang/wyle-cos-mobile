@@ -570,7 +570,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               ).createShader(bounds),
               child: Image.asset(
                 'assets/logos/wyle_logo_white.png',
-                height: 52,
+                height: 80,
                 fit: BoxFit.contain,
               ),
             );
