@@ -93,69 +93,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Future<void> _signInWithGoogle() async {
     _setLoading('google');
+
     try {
-      // ── Step 1: ask Wyle backend for the real Google OAuth URL ─────────────
-      Map<String, dynamic>? oauthData;
-      try {
-        oauthData = await BuddyApiService.instance.startOAuth('google');
-      } catch (_) { /* backend unreachable — fall through */ }
+      final oauthData =
+          await BuddyApiService.instance.startOAuth('google');
 
-      final authUrl = oauthData?['auth_url'] as String?;
+      final authUrl = oauthData?['auth_url'];
 
-      if (authUrl != null && authUrl.isNotEmpty) {
-        // Web keeps browser redirect flow. Mobile uses in-app WebView to capture
-        // callback token and complete login without manual copy/paste.
-        if (kIsWeb) {
-          final launched = await launchUrl(
-            Uri.parse(authUrl),
-            mode: LaunchMode.platformDefault,
-          );
-          if (!launched && mounted) {
-            _setError('Could not open the sign-in page. Try again.');
-          }
-          _clearLoading();
-          return;
-        }
-
-        final oauthResult = await Navigator.of(context).push<_OAuthCaptureResult>(
-          MaterialPageRoute(
-            fullscreenDialog: true,
-            builder: (_) => _GoogleOAuthWebViewScreen(initialUrl: authUrl),
-          ),
-        );
-
-        if (!mounted) return;
-        if (oauthResult != null && oauthResult.token.isNotEmpty) {
-          await _completeOAuthTokenSignIn(
-            oauthResult.token,
-            userId: oauthResult.userId,
-          );
-          _clearLoading();
-          return;
-        }
-
-        _setError('Google sign-in was cancelled. Please try again.');
-        _clearLoading();
-        return;
+      if (authUrl == null || authUrl.isEmpty) {
+        throw Exception('No auth URL returned');
       }
 
-      // ── Fallback: direct Google sign-in (no Wyle backend) ──────────────────
-      final result = await GoogleAuthService.instance.signIn();
-      if (!mounted) return;
-      if (result.success) {
-        await _completeAuth(
-          id:       result.id    ?? result.email,
-          name:     result.displayName ?? result.email.split('@').first,
-          email:    result.email,
-          provider: 'google',
-          apiToken: result.accessToken,
-        );
-      } else {
-        _setError(result.error == 'Cancelled'
-            ? 'Sign-in was cancelled.'
-            : 'Google sign-in failed. Try again.');
+      // ✅ Always use external browser (NO WebView)
+      final launched = await launchUrl(
+        Uri.parse(authUrl),
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched && mounted) {
+        _setError('Could not open the sign-in page.');
       }
-    } catch (_) {
+
+      // ⛔ DO NOT complete login here
+      // Deep link will handle it
+
+    } catch (e) {
       _setError('Google sign-in failed. Try again.');
     } finally {
       _clearLoading();
