@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'navigation/app_router.dart';
 import 'theme/app_theme.dart';
+import 'services/deep_link_service.dart';
+import 'services/auth_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,21 +51,70 @@ Future<void> main() async {
   );
 }
 
-class WyleApp extends ConsumerWidget {
+class WyleApp extends ConsumerStatefulWidget {
   const WyleApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // routerProvider creates GoRouter exactly once — read is sufficient.
+  ConsumerState<WyleApp> createState() => _WyleAppState();
+}
+
+class _WyleAppState extends ConsumerState<WyleApp> {
+
+  @override
+  void initState() {
+    super.initState();
+
+    DeepLinkService.instance.init(_handleDeepLink);
+  }
+
+  bool _isHandlingLink = false;
+
+  Future<void> _handleDeepLink(Uri uri) async {
+    if (_isHandlingLink) return;
+    _isHandlingLink = true;
+
+    try {
+      await Future.microtask(() async {
+        if (uri.host == 'oauth-callback') {
+          await AuthService.instance.handleOAuthCallback(
+            uri: uri,
+            ref: ref,
+          );
+
+          if (mounted) {
+            ref.read(routerProvider).go(AppRoutes.main);
+          }
+        }
+      });
+    } finally {
+      _isHandlingLink = false;
+    }
+  }
+
+  Future<void> _handleOAuth(Uri uri) async {
+
+    try {
+      // TEMP store so API can use it
+
+      if (mounted) {
+        ref.read(routerProvider).go(AppRoutes.main);
+      }
+
+    } catch (e) {
+      debugPrint('❌ OAuth deep link failed: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
 
     return MaterialApp.router(
-      title:            'Wyle',
+      title: 'Wyle',
       debugShowCheckedModeBanner: false,
-      theme:            AppTheme.dark,
-      routerConfig:     router,
+      theme: AppTheme.dark,
+      routerConfig: router,
       builder: (context, child) {
-        // Enforce font scaling limits so layout doesn't break on accessibility sizes
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(

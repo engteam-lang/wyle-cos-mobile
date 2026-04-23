@@ -55,11 +55,11 @@ class UserModel {
       onboardingStep:     json['onboardingStep'] ?? 0,
       preferences: json['preferences'] != null
           ? UserPreferences.fromJson(json['preferences'])
-          : const UserPreferences(),
+          : UserPreferences(),
       autonomyTier: json['autonomyTier'] ?? 1,
       insights: json['insights'] != null
           ? UserInsights.fromJson(json['insights'])
-          : const UserInsights(),
+          : UserInsights(),
     );
   }
 

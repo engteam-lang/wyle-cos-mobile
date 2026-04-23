@@ -14,7 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 // AuthCallbackScreen
 // Handles the redirect back from api.wyle.ai after OAuth.
-// Expected URL:  .../#/auth-callback?token=JWT&user_id=xxx
+// Expected URL:  .../#/auth-callback?auth_token=JWT&user_public_id=xxx
 // ─────────────────────────────────────────────────────────────────────────────
 class AuthCallbackScreen extends ConsumerStatefulWidget {
   final String? token;
@@ -86,15 +86,36 @@ class _AuthCallbackScreenState extends ConsumerState<AuthCallbackScreen> {
     }
   }
 
-  /// Reads ?token= from the current browser URL (web only).
+  /// Reads auth token from current browser URL (web only).
   String? _extractTokenFromUrl() {
     if (!kIsWeb) return null;
     try {
       // ignore: undefined_prefixed_name, avoid_web_libraries_in_flutter
       final href = Uri.base.toString();
-      final uri  = Uri.parse(href);
-      return uri.queryParameters['token']
-          ?? uri.queryParameters['access_token'];
+      final uri = Uri.parse(href);
+
+      String? fromQuery(Uri u) =>
+          u.queryParameters['auth_token'] ??
+          u.queryParameters['token'] ??
+          u.queryParameters['access_token'];
+
+      // Standard query params, e.g. /auth-callback?auth_token=...
+      final direct = fromQuery(uri);
+      if (direct != null && direct.isNotEmpty) return direct;
+
+      // Hash-based callback, e.g. /#/auth-callback?auth_token=...
+      final fragment = uri.fragment;
+      if (fragment.isNotEmpty && fragment.contains('?')) {
+        final queryPart = fragment.substring(fragment.indexOf('?') + 1);
+        final parsed = Uri.splitQueryString(queryPart);
+        final fromFragment = parsed['auth_token'] ??
+            parsed['token'] ??
+            parsed['access_token'];
+        if (fromFragment != null && fromFragment.isNotEmpty) {
+          return fromFragment;
+        }
+      }
+      return null;
     } catch (_) {
       return null;
     }

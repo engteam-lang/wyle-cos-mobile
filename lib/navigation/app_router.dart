@@ -179,11 +179,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: AppRoutes.morningBrief,  builder: (_, __) => const MorningBriefScreen()),
       GoRoute(path: AppRoutes.settings,     builder: (_, __) => const SettingsScreen()),
-      // OAuth callback — Wyle backend redirects here with ?token=JWT after login
+      // OAuth callback — Wyle backend redirects here after login.
       GoRoute(
         path: AppRoutes.authCallback,
         builder: (context, state) => AuthCallbackScreen(
-          token:  state.uri.queryParameters['token']
+          token:  state.uri.queryParameters['auth_token']
+               ?? state.uri.queryParameters['token']
                ?? state.uri.queryParameters['access_token'],
           userId: state.uri.queryParameters['user_id']
                ?? state.uri.queryParameters['user_public_id'],
