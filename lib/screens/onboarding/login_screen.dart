@@ -1061,14 +1061,26 @@ class _GoogleOAuthWebViewScreenState extends State<_GoogleOAuthWebViewScreen> {
 
     try {
       final uri = Uri.parse(raw);
-      final token = uri.queryParameters['token'] ?? uri.queryParameters['access_token'];
-      final userId = uri.queryParameters['user_id'] ?? uri.queryParameters['user_public_id'];
+      String? token = uri.queryParameters['auth_token'] ??
+          uri.queryParameters['token'] ??
+          uri.queryParameters['access_token'];
+      String? userId = uri.queryParameters['user_id'] ?? uri.queryParameters['user_public_id'];
+
+      // Support hash-based callback URLs: /#/auth-callback?auth_token=...
+      if ((token == null || token.isEmpty) && uri.fragment.contains('?')) {
+        final queryPart = uri.fragment.substring(uri.fragment.indexOf('?') + 1);
+        final fragmentQuery = Uri.splitQueryString(queryPart);
+        token = fragmentQuery['auth_token'] ??
+            fragmentQuery['token'] ??
+            fragmentQuery['access_token'];
+        userId ??= fragmentQuery['user_id'] ?? fragmentQuery['user_public_id'];
+      }
       if (token != null && token.isNotEmpty) {
         return _OAuthCaptureResult(token: token, userId: userId);
       }
     } catch (_) {}
 
-    final tokenMatch = RegExp(r'"(?:access_token|token)"\s*:\s*"([^"]+)"')
+    final tokenMatch = RegExp(r'"(?:auth_token|access_token|token)"\s*:\s*"([^"]+)"')
         .firstMatch(raw);
     if (tokenMatch != null) {
       final token = tokenMatch.group(1)!;
