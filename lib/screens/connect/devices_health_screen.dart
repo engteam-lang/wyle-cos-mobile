@@ -2,30 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'connect_screen.dart' show kProfileBg, kProfileCard, kProfileBorder, kProfileGradient;
+import '../../widgets/coming_soon_overlay.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Devices & Health connection screen
-// ─────────────────────────────────────────────────────────────────────────────
 class DevicesHealthScreen extends ConsumerStatefulWidget {
   const DevicesHealthScreen({super.key});
-
   @override
-  ConsumerState<DevicesHealthScreen> createState() =>
-      _DevicesHealthScreenState();
+  ConsumerState<DevicesHealthScreen> createState() => _DevicesHealthScreenState();
 }
 
 class _DevicesHealthScreenState extends ConsumerState<DevicesHealthScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, ComingSoonMixin {
 
   late AnimationController _ctrl;
   late Animation<double>   _fade;
   late Animation<Offset>   _slide;
 
-  // Connected state per device
-  final Map<String, bool> _connected = {
-    'Apple Watch':  false,
-    'Whoop':        false,
-    'Samsung Fit':  false,
+  static const _meta = {
+    'Apple Watch': (Color(0xFF1E0A38), Color(0xFFAB47BC), Icons.watch_rounded,          'Apple Health & Activity'),
+    'Whoop':       (Color(0xFF0A2028), Color(0xFF00BCD4), Icons.monitor_heart_rounded,   'HRV & Recovery Tracking'),
+    'Samsung Fit': (Color(0xFF0A1A38), Color(0xFF2196F3), Icons.fitness_center_rounded,  'Samsung Health Platform'),
   };
 
   @override
@@ -38,98 +33,68 @@ class _DevicesHealthScreenState extends ConsumerState<DevicesHealthScreen>
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    disposeComingSoon();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kProfileBg,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: kProfileGradient,
-        child: SafeArea(
-          child: FadeTransition(
-            opacity: _fade,
-            child: SlideTransition(
-              position: _slide,
-              child: Column(
-                children: [
-                  _header(context),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      physics: const ClampingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                      child: Column(
-                        children: _connected.entries.map((e) =>
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _deviceCard(e.key, e.value),
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: kProfileBg,
+          body: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: kProfileGradient,
+            child: SafeArea(
+              child: FadeTransition(
+                opacity: _fade,
+                child: SlideTransition(
+                  position: _slide,
+                  child: Column(
+                    children: [
+                      _header(context),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const ClampingScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                          child: Column(
+                            children: _meta.entries.map((e) =>
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _card(e.key),
+                              )).toList(),
                           ),
-                        ).toList(),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
         ),
-      ),
+        if (csVisible) buildComingSoonOverlay(),
+      ],
     );
   }
 
-  Widget _header(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 16, 14),
-      child: Row(
-        children: [
-          _backBtn(context),
-          const SizedBox(width: 12),
-          Container(
-            width: 34, height: 34,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E0A38),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Icon(Icons.watch_rounded, color: Color(0xFFAB47BC), size: 18),
-          ),
-          const SizedBox(width: 10),
-          Text('Devices & Health',
-              style: GoogleFonts.poppins(
-                  fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
-        ],
-      ),
-    );
-  }
+  Widget _card(String name) {
+    final m         = _meta[name]!;
+    final iconBg    = m.$1;
+    final iconColor = m.$2;
+    final iconData  = m.$3;
+    final subtitle  = m.$4;
 
-  Widget _deviceCard(String name, bool connected) {
-    final _deviceMeta = {
-      'Apple Watch': (const Color(0xFF1E0A38), const Color(0xFFAB47BC), Icons.watch_rounded, 'Apple Health & Activity'),
-      'Whoop':       (const Color(0xFF0A2028), const Color(0xFF00BCD4), Icons.monitor_heart_rounded, 'HRV & Recovery Tracking'),
-      'Samsung Fit': (const Color(0xFF0A1A38), const Color(0xFF2196F3), Icons.fitness_center_rounded, 'Samsung Health Platform'),
-    };
-    final meta = _deviceMeta[name]!;
-    final iconBg    = meta.$1 as Color;
-    final iconColor = meta.$2 as Color;
-    final iconData  = meta.$3 as IconData;
-    final subtitle  = meta.$4 as String;
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 280),
+    return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: connected
-            ? Color.lerp(iconBg, kProfileCard, 0.5)!
-            : kProfileCard,
+        color: kProfileCard,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: connected ? iconColor.withOpacity(0.45) : kProfileBorder,
-          width: connected ? 1.5 : 1.0,
-        ),
-        boxShadow: connected
-            ? [BoxShadow(color: iconColor.withOpacity(0.14), blurRadius: 16)]
-            : [],
+        border: Border.all(color: kProfileBorder),
       ),
       child: Row(
         children: [
@@ -146,33 +111,26 @@ class _DevicesHealthScreenState extends ConsumerState<DevicesHealthScreen>
                 Text(name,
                     style: GoogleFonts.poppins(
                         fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
-                Text(connected ? 'Connected' : subtitle,
+                Text(subtitle,
                     style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: connected ? iconColor : const Color(0xFF6A8E8C))),
+                        fontSize: 12, color: const Color(0xFF6A8E8C))),
               ],
             ),
           ),
           const SizedBox(width: 10),
           GestureDetector(
-            onTap: () => setState(() => _connected[name] = !connected),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 240),
+            onTap: () => showComingSoon(name),
+            child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: connected ? iconColor.withOpacity(0.15) : const Color(0xFF1B998B).withOpacity(0.18),
+                color: const Color(0xFF1B998B).withOpacity(0.14),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: connected ? iconColor.withOpacity(0.4) : const Color(0xFF1B998B).withOpacity(0.4),
-                ),
+                border: Border.all(color: const Color(0xFF1B998B).withOpacity(0.4)),
               ),
-              child: Text(
-                connected ? 'Disconnect' : 'Connect',
-                style: GoogleFonts.poppins(
-                  fontSize: 12, fontWeight: FontWeight.w600,
-                  color: connected ? iconColor : const Color(0xFF1B998B),
-                ),
-              ),
+              child: Text('Connect',
+                  style: GoogleFonts.poppins(
+                      fontSize: 12, fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1B998B))),
             ),
           ),
         ],
@@ -180,18 +138,33 @@ class _DevicesHealthScreenState extends ConsumerState<DevicesHealthScreen>
     );
   }
 
-  Widget _backBtn(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Navigator.pop(context),
-      child: Container(
-        width: 34, height: 34,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A3530),
-          shape: BoxShape.circle,
-          border: Border.all(color: kProfileBorder),
+  Widget _header(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 16, 16, 14),
+    child: Row(
+      children: [
+        GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Container(
+            width: 34, height: 34,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A3530), shape: BoxShape.circle,
+              border: Border.all(color: kProfileBorder),
+            ),
+            child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 16),
+          ),
         ),
-        child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70, size: 16),
-      ),
-    );
-  }
+        const SizedBox(width: 12),
+        Container(
+          width: 34, height: 34,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E0A38), borderRadius: BorderRadius.circular(9)),
+          child: const Icon(Icons.watch_rounded, color: Color(0xFFAB47BC), size: 18),
+        ),
+        const SizedBox(width: 10),
+        Text('Devices & Health',
+            style: GoogleFonts.poppins(
+                fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
+      ],
+    ),
+  );
 }

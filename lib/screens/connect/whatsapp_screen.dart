@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'connect_screen.dart' show kProfileBg, kProfileCard, kProfileBorder, kProfileGradient;
+import '../../widgets/coming_soon_overlay.dart';
 
 class WhatsAppScreen extends ConsumerStatefulWidget {
   const WhatsAppScreen({super.key});
@@ -10,7 +11,7 @@ class WhatsAppScreen extends ConsumerStatefulWidget {
 }
 
 class _WhatsAppScreenState extends ConsumerState<WhatsAppScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, ComingSoonMixin {
 
   late AnimationController _ctrl;
   late Animation<double>   _fade;
@@ -31,54 +32,49 @@ class _WhatsAppScreenState extends ConsumerState<WhatsAppScreen>
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() { _ctrl.dispose(); disposeComingSoon(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kProfileBg,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: kProfileGradient,
-        child: SafeArea(
-          child: FadeTransition(
-            opacity: _fade,
-            child: SlideTransition(
-              position: _slide,
-              child: Column(
-                children: [
-                  _header(context),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      physics: const ClampingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Main WhatsApp card
-                          _mainCard(),
-                          if (_connected) ...[
-                            const SizedBox(height: 20),
-                            _sectionLabel('Permissions'),
-                            const SizedBox(height: 12),
-                            _permCard('Read Messages',   'Let Wyle summarise your chats', true),
-                            const SizedBox(height: 10),
-                            _permCard('Business Mode',  'Monitor business messages only', _bizMode,
-                                onToggle: (v) => setState(() => _bizMode = v)),
-                          ],
-                          const SizedBox(height: 24),
-                          _infoNote(),
-                        ],
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: kProfileBg,
+          body: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: kProfileGradient,
+            child: SafeArea(
+              child: FadeTransition(
+                opacity: _fade,
+                child: SlideTransition(
+                  position: _slide,
+                  child: Column(
+                    children: [
+                      _header(context),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const ClampingScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _mainCard(),
+                              const SizedBox(height: 24),
+                              _infoNote(),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
         ),
-      ),
+        if (csVisible) buildComingSoonOverlay(),
+      ],
     );
   }
 
@@ -131,27 +127,22 @@ class _WhatsAppScreenState extends ConsumerState<WhatsAppScreen>
           ),
           const SizedBox(height: 16),
           GestureDetector(
-            onTap: () => setState(() => _connected = !_connected),
+            onTap: () => showComingSoon('WhatsApp'),
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 13),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: _connected
-                      ? [Colors.white.withOpacity(0.05), Colors.white.withOpacity(0.03)]
-                      : [_green.withOpacity(0.85), _green.withOpacity(0.60)],
+                  colors: [_green.withOpacity(0.85), _green.withOpacity(0.60)],
                 ),
                 borderRadius: BorderRadius.circular(12),
-                border: _connected
-                    ? Border.all(color: const Color(0xFF3A3A3A))
-                    : null,
               ),
               child: Center(
                 child: Text(
-                  _connected ? 'Disconnect WhatsApp' : 'Connect WhatsApp',
+                  'Connect WhatsApp',
                   style: GoogleFonts.poppins(
                     fontSize: 14, fontWeight: FontWeight.w600,
-                    color: _connected ? const Color(0xFF9CA3AF) : Colors.white,
+                    color: Colors.white,
                   ),
                 ),
               ),

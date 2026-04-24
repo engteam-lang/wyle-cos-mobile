@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'connect_screen.dart' show kProfileBg, kProfileCard, kProfileBorder, kProfileGradient;
+import '../../widgets/coming_soon_overlay.dart';
 
 class CommercialAppsScreen extends ConsumerStatefulWidget {
   const CommercialAppsScreen({super.key});
@@ -10,18 +11,18 @@ class CommercialAppsScreen extends ConsumerStatefulWidget {
 }
 
 class _CommercialAppsScreenState extends ConsumerState<CommercialAppsScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, ComingSoonMixin {
 
   late AnimationController _ctrl;
   late Animation<double>   _fade;
   late Animation<Offset>   _slide;
 
-  final Map<String, bool> _connected = {
-    'Amazon':    false,
-    'Noon':      false,
-    'Talabat':   false,
-    'Carrefour': false,
-    'Deliveroo': false,
+  static const _meta = {
+    'Amazon':    (Color(0xFFFF9900), Color(0xFF2E1A00), Icons.shopping_cart_rounded,    'E-Commerce & Delivery'),
+    'Noon':      (Color(0xFFFFE600), Color(0xFF2A2A00), Icons.storefront_rounded,       'Middle East Marketplace'),
+    'Talabat':   (Color(0xFFFF6D00), Color(0xFF2E1000), Icons.delivery_dining_rounded,  'Food Delivery'),
+    'Carrefour': (Color(0xFF0070CC), Color(0xFF001A2E), Icons.local_grocery_store_rounded, 'Grocery & Hypermarket'),
+    'Deliveroo': (Color(0xFF00CCBC), Color(0xFF002A28), Icons.two_wheeler_rounded,      'Restaurant Delivery'),
   };
 
   @override
@@ -34,74 +35,68 @@ class _CommercialAppsScreenState extends ConsumerState<CommercialAppsScreen>
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
-
-  static const _meta = {
-    'Amazon':    (Color(0xFFFF9900), Color(0xFF2E1A00), Icons.shopping_cart_rounded,    'E-Commerce & Delivery'),
-    'Noon':      (Color(0xFFFFE600), Color(0xFF2A2A00), Icons.storefront_rounded,       'Middle East Marketplace'),
-    'Talabat':   (Color(0xFFFF6D00), Color(0xFF2E1000), Icons.delivery_dining_rounded,  'Food Delivery'),
-    'Carrefour': (Color(0xFF0070CC), Color(0xFF001A2E), Icons.local_grocery_store_rounded,'Grocery & Hypermarket'),
-    'Deliveroo': (Color(0xFF00CCBC), Color(0xFF002A28), Icons.two_wheeler_rounded,      'Restaurant Delivery'),
-  };
+  void dispose() {
+    _ctrl.dispose();
+    disposeComingSoon();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kProfileBg,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: kProfileGradient,
-        child: SafeArea(
-          child: FadeTransition(
-            opacity: _fade,
-            child: SlideTransition(
-              position: _slide,
-              child: Column(
-                children: [
-                  _header(context),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      physics: const ClampingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                      child: Column(
-                        children: _connected.entries.map((e) =>
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _card(e.key, e.value),
-                          )).toList(),
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: kProfileBg,
+          body: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: kProfileGradient,
+            child: SafeArea(
+              child: FadeTransition(
+                opacity: _fade,
+                child: SlideTransition(
+                  position: _slide,
+                  child: Column(
+                    children: [
+                      _header(context),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const ClampingScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                          child: Column(
+                            children: _meta.entries.map((e) =>
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _card(e.key),
+                              )).toList(),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
         ),
-      ),
+        if (csVisible) buildComingSoonOverlay(),
+      ],
     );
   }
 
-  Widget _card(String name, bool connected) {
+  Widget _card(String name) {
     final m        = _meta[name]!;
     final accent   = m.$1;
     final iconBg   = m.$2;
     final iconData = m.$3;
     final subtitle = m.$4;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 280),
+    return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: connected ? Color.lerp(iconBg, kProfileCard, 0.45)! : kProfileCard,
+        color: kProfileCard,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: connected ? accent.withOpacity(0.5) : kProfileBorder,
-          width: connected ? 1.5 : 1.0,
-        ),
-        boxShadow: connected
-            ? [BoxShadow(color: accent.withOpacity(0.14), blurRadius: 16)]
-            : [],
+        border: Border.all(color: kProfileBorder),
       ),
       child: Row(
         children: [
@@ -118,36 +113,25 @@ class _CommercialAppsScreenState extends ConsumerState<CommercialAppsScreen>
                 Text(name,
                     style: GoogleFonts.poppins(
                         fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
-                Text(connected ? 'Connected' : subtitle,
+                Text(subtitle,
                     style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: connected ? accent : const Color(0xFF6A8E8C))),
+                        fontSize: 12, color: const Color(0xFF6A8E8C))),
               ],
             ),
           ),
           GestureDetector(
-            onTap: () => setState(() => _connected[name] = !connected),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 240),
+            onTap: () => showComingSoon(name),
+            child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: connected
-                    ? accent.withOpacity(0.12)
-                    : const Color(0xFF1B998B).withOpacity(0.14),
+                color: const Color(0xFF1B998B).withOpacity(0.14),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: connected
-                      ? accent.withOpacity(0.4)
-                      : const Color(0xFF1B998B).withOpacity(0.4),
-                ),
+                border: Border.all(color: const Color(0xFF1B998B).withOpacity(0.4)),
               ),
-              child: Text(
-                connected ? 'Disconnect' : 'Connect',
-                style: GoogleFonts.poppins(
-                  fontSize: 12, fontWeight: FontWeight.w600,
-                  color: connected ? accent : const Color(0xFF1B998B),
-                ),
-              ),
+              child: Text('Connect',
+                  style: GoogleFonts.poppins(
+                      fontSize: 12, fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1B998B))),
             ),
           ),
         ],

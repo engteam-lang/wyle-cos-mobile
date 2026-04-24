@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'connect_screen.dart' show kProfileBg, kProfileCard, kProfileBorder, kProfileGradient;
+import '../../widgets/coming_soon_overlay.dart';
 
 class GovernmentScreen extends ConsumerStatefulWidget {
   const GovernmentScreen({super.key});
@@ -10,17 +11,17 @@ class GovernmentScreen extends ConsumerStatefulWidget {
 }
 
 class _GovernmentScreenState extends ConsumerState<GovernmentScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, ComingSoonMixin {
 
   late AnimationController _ctrl;
   late Animation<double>   _fade;
   late Animation<Offset>   _slide;
 
-  final Map<String, bool> _connected = {
-    'UAE Pass':       false,
-    'MOHRE':          false,
-    'DHA (Dubai)':    false,
-    'RTA':            false,
+  static const _meta = {
+    'UAE Pass':    (Color(0xFF5C9DE8), Color(0xFF0D2B4A), Icons.verified_user_rounded,  'National Digital Identity'),
+    'MOHRE':       (Color(0xFF4CAF50), Color(0xFF0A2E1E), Icons.work_rounded,            'Ministry of HR & Emiratisation'),
+    'DHA (Dubai)': (Color(0xFF29B6F6), Color(0xFF0A2040), Icons.local_hospital_rounded,  'Dubai Health Authority'),
+    'RTA':         (Color(0xFFFFA726), Color(0xFF2E1A08), Icons.directions_car_rounded,   'Roads & Transport Authority'),
   };
 
   @override
@@ -33,73 +34,68 @@ class _GovernmentScreenState extends ConsumerState<GovernmentScreen>
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
-
-  static const _meta = {
-    'UAE Pass':    (Color(0xFF5C9DE8), Color(0xFF0D2B4A), Icons.verified_user_rounded,  'National Digital Identity'),
-    'MOHRE':       (Color(0xFF4CAF50), Color(0xFF0A2E1E), Icons.work_rounded,            'Ministry of HR & Emiratisation'),
-    'DHA (Dubai)': (Color(0xFF29B6F6), Color(0xFF0A2040), Icons.local_hospital_rounded,  'Dubai Health Authority'),
-    'RTA':         (Color(0xFFFFA726), Color(0xFF2E1A08), Icons.directions_car_rounded,   'Roads & Transport Authority'),
-  };
+  void dispose() {
+    _ctrl.dispose();
+    disposeComingSoon();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kProfileBg,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: kProfileGradient,
-        child: SafeArea(
-          child: FadeTransition(
-            opacity: _fade,
-            child: SlideTransition(
-              position: _slide,
-              child: Column(
-                children: [
-                  _header(context),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      physics: const ClampingScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                      child: Column(
-                        children: _connected.entries.map((e) =>
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: _card(e.key, e.value),
-                          )).toList(),
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: kProfileBg,
+          body: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: kProfileGradient,
+            child: SafeArea(
+              child: FadeTransition(
+                opacity: _fade,
+                child: SlideTransition(
+                  position: _slide,
+                  child: Column(
+                    children: [
+                      _header(context),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const ClampingScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                          child: Column(
+                            children: _meta.entries.map((e) =>
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _card(e.key),
+                              )).toList(),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
         ),
-      ),
+        if (csVisible) buildComingSoonOverlay(),
+      ],
     );
   }
 
-  Widget _card(String name, bool connected) {
+  Widget _card(String name) {
     final m        = _meta[name]!;
     final accent   = m.$1;
     final iconBg   = m.$2;
     final iconData = m.$3;
     final subtitle = m.$4;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 280),
+    return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: connected ? Color.lerp(iconBg, kProfileCard, 0.45)! : kProfileCard,
+        color: kProfileCard,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: connected ? accent.withOpacity(0.5) : kProfileBorder,
-          width: connected ? 1.5 : 1.0,
-        ),
-        boxShadow: connected
-            ? [BoxShadow(color: accent.withOpacity(0.14), blurRadius: 16)]
-            : [],
+        border: Border.all(color: kProfileBorder),
       ),
       child: Row(
         children: [
@@ -116,36 +112,25 @@ class _GovernmentScreenState extends ConsumerState<GovernmentScreen>
                 Text(name,
                     style: GoogleFonts.poppins(
                         fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white)),
-                Text(connected ? 'Connected' : subtitle,
+                Text(subtitle,
                     style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: connected ? accent : const Color(0xFF6A8E8C))),
+                        fontSize: 12, color: const Color(0xFF6A8E8C))),
               ],
             ),
           ),
           GestureDetector(
-            onTap: () => setState(() => _connected[name] = !connected),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 240),
+            onTap: () => showComingSoon(name),
+            child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               decoration: BoxDecoration(
-                color: connected
-                    ? accent.withOpacity(0.12)
-                    : const Color(0xFF1B998B).withOpacity(0.14),
+                color: const Color(0xFF1B998B).withOpacity(0.14),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: connected
-                      ? accent.withOpacity(0.4)
-                      : const Color(0xFF1B998B).withOpacity(0.4),
-                ),
+                border: Border.all(color: const Color(0xFF1B998B).withOpacity(0.4)),
               ),
-              child: Text(
-                connected ? 'Disconnect' : 'Connect',
-                style: GoogleFonts.poppins(
-                  fontSize: 12, fontWeight: FontWeight.w600,
-                  color: connected ? accent : const Color(0xFF1B998B),
-                ),
-              ),
+              child: Text('Connect',
+                  style: GoogleFonts.poppins(
+                      fontSize: 12, fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1B998B))),
             ),
           ),
         ],
