@@ -65,6 +65,10 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
+      # ── Generate app launcher icons ───────────────────────────────────────────
+      - name: Generate app launcher icons
+        run: dart run flutter_launcher_icons
+
       # ── Build ─────────────────────────────────────────────────────────────────
       # IMPORTANT: do NOT run `flutter clean` before this step.
       # `flutter clean` deletes .dart_tool/ (Flutter's incremental build-state

@@ -57,6 +57,24 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.13.1
+
+# ── App icon generation ────────────────────────────────────────────────────────
+# Run:  dart run flutter_launcher_icons
+# CI runs this automatically before every APK build.
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: false
+  # Base image for legacy Android (< API 26) — full square icon
+  image_path: "assets/logos/wyle_logo_teal.png"
+  # Adaptive icon for Android 8+ (API 26+)
+  # Foreground: logo centred with safe-zone padding
+  # Background: app's dark background colour
+  adaptive_icon_foreground: "assets/logos/wyle_logo_teal.png"
+  adaptive_icon_background: "#000D12"
+  min_sdk_android: 21
+  web:
+    generate: false
 
 flutter:
   uses-material-design: true
