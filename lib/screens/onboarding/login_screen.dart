@@ -480,22 +480,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     const Spacer(flex: 3),
                     _stagger(5, _buildFooter()),
                     const SizedBox(height: 12),
-                    // -- Manual token bypass (temporary until backend redirect is set up) --
-                    // GestureDetector(
-                    //   onTap: _showTokenDialog,
-                    //   child: Padding(
-                    //     padding: const EdgeInsets.symmetric(vertical: 6),
-                    //     child: Text(
-                    //       'Already have a token?',
-                    //       style: GoogleFonts.poppins(
-                    //         fontSize: 11,
-                    //         color: const Color(0xFF2A6A78),
-                    //         decoration: TextDecoration.underline,
-                    //         decorationColor: const Color(0xFF2A6A78),
-                    //       ),
-                    //     ),
-                    //   ),
-                    // ),
+                    
+                    GestureDetector(
+                      onTap: _showTokenDialog,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Text(
+                          'Already have a token?',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: const Color(0xFF2A6A78),
+                            decoration: TextDecoration.underline,
+                            decorationColor: const Color(0xFF2A6A78),
+                          ),
+                        ),
+                      ),
+                    ),
                     
                     const SizedBox(height: 16),
                   ],
