@@ -62,21 +62,22 @@ class _WelcomeScreenState extends State<WelcomeScreen>
         child: SafeArea(
           child: FadeTransition(
             opacity: _fadeAnimation,
-            child: SingleChildScrollView(
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 28),
               child: Column(
+                mainAxisSize: MainAxisSize.max,
                 children: [
-                  const SizedBox(height: 48),
-                  _buildLogo(),
-                  const SizedBox(height: 48),
-                  _buildHeroHeading(),
-                  const SizedBox(height: 40),
-                  _buildFeatureCards(),
-                  const SizedBox(height: 48),
-                  _buildGetStartedButton(),
                   const SizedBox(height: 20),
+                  _buildLogo(),
+                  const Spacer(flex: 2),
+                  _buildHeroHeading(),
+                  const Spacer(flex: 2),
+                  _buildFeatureCards(),
+                  const Spacer(flex: 2),
+                  _buildGetStartedButton(),
+                  const SizedBox(height: 14),
                   _buildSignInLink(),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -91,7 +92,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       children: [
         Image.asset(
           'assets/logos/wyle_logo_white.png',
-          height: 56,
+          height: 44,
           fit: BoxFit.contain,
         ),
         const SizedBox(height: 8),
@@ -145,21 +146,21 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           'Your life,\norchestrated.',
           textAlign: TextAlign.center,
           style: GoogleFonts.poppins(
-            fontSize: 40,
+            fontSize: 34,
             fontWeight: FontWeight.w300,
             color: const Color(0xFFFEFFFE),
             height: 1.2,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         Text(
           'Your AI-powered chief of staff that manages\nyour schedule, obligations, and priorities.',
           textAlign: TextAlign.center,
           style: GoogleFonts.poppins(
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: FontWeight.w400,
             color: const Color(0xFF8FB8BF),
-            height: 1.6,
+            height: 1.5,
           ),
         ),
       ],
@@ -188,7 +189,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     return Column(
       children: features
           .map((f) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.only(bottom: 10),
                 child: _FeatureCard(
                   icon: f.icon,
                   title: f.title,
@@ -204,7 +205,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
       onTap: () => context.go(AppRoutes.login),
       child: Container(
         width: double.infinity,
-        height: 56,
+        height: 52,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
           gradient: const LinearGradient(
@@ -275,24 +276,24 @@ class _FeatureCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF0A3D4A),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFF1A5060), width: 1),
       ),
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               color: const Color(0xFF1B998B).withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: const Color(0xFF1B998B), size: 22),
+            child: Icon(icon, color: const Color(0xFF1B998B), size: 20),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -300,7 +301,7 @@ class _FeatureCard extends StatelessWidget {
                 Text(
                   title,
                   style: GoogleFonts.poppins(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: const Color(0xFFFEFFFE),
                   ),
@@ -309,7 +310,7 @@ class _FeatureCard extends StatelessWidget {
                 Text(
                   subtitle,
                   style: GoogleFonts.poppins(
-                    fontSize: 12,
+                    fontSize: 11,
                     color: const Color(0xFF8FB8BF),
                   ),
                 ),
