@@ -70,7 +70,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
     final user  = state.user;
     final name  = user?.name ?? 'User';
     final gender = ref.watch(buddyAvatarGenderProvider);
-    const role  = 'Founder & CEO';
+    const role  = '';
 
     return Scaffold(
       backgroundColor: kProfileBg,
