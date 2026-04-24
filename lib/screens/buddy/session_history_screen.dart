@@ -13,20 +13,55 @@ const _verdigris = Color(0xFF1B998B);
 const _amber     = Color(0xFFCB9A2D);
 const _white     = Color(0xFFFFFFFF);
 const _textSec   = Color(0xFF9A9A9A);
-const _crimson   = Color(0xFFFF3B30);
 
-// ── Data class that combines a conversation with its loaded detail ─────────────
-class _ConvSummary {
-  final ConversationModel conv;
-  final int messageCount;
-  /// Last message timestamp, or null if unknown
-  final DateTime? lastAt;
+// ── A day-session: all messages from one calendar day ─────────────────────────
+class _DaySession {
+  final DateTime date;           // midnight of the day (local)
+  final List<ConversationMessageModel> messages;
 
-  const _ConvSummary({
-    required this.conv,
-    required this.messageCount,
-    this.lastAt,
-  });
+  const _DaySession({required this.date, required this.messages});
+
+  int get messageCount => messages.length;
+
+  /// User-visible label: "Today", "Yesterday", or "Apr 22, 2026"
+  String get dateLabel {
+    final now   = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final diff  = today.difference(date).inDays;
+    if (diff == 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  /// Time range: "9:30 AM – 11:45 AM"
+  String get timeRange {
+    if (messages.isEmpty) return '';
+    DateTime? first = _msgTime(messages.first);
+    DateTime? last  = _msgTime(messages.last);
+    if (first == null) return '';
+    final start = _fmt12(first);
+    if (last == null || last == first) return start;
+    return '$start – ${_fmt12(last)}';
+  }
+
+  static DateTime? _msgTime(ConversationMessageModel m) {
+    if (m.createdAt == null) return null;
+    try { return DateTime.parse(m.createdAt!).toLocal(); } catch (_) { return null; }
+  }
+
+  static String _fmt12(DateTime dt) {
+    final h    = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final min  = dt.minute.toString().padLeft(2, '0');
+    final ampm = dt.hour < 12 ? 'AM' : 'PM';
+    return '$h:$min $ampm';
+  }
+
+  /// Number of user turns
+  int get userTurns => messages.where((m) => m.role == 'user').length;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -40,114 +75,80 @@ class SessionHistoryScreen extends StatefulWidget {
 }
 
 class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
-  List<_ConvSummary>? _summaries;
+  List<_DaySession>? _sessions;
   bool _loading = true;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadConversations();
+    _loadSessions();
   }
 
   // ── Data loading ─────────────────────────────────────────────────────────────
-  Future<void> _loadConversations() async {
+  Future<void> _loadSessions() async {
     if (mounted) setState(() { _loading = true; _error = null; });
 
     try {
+      // 1. Fetch all conversations
       final convs = await BuddyApiService.instance.getConversations();
+      if (convs.isEmpty) {
+        if (mounted) setState(() { _sessions = []; _loading = false; });
+        return;
+      }
 
-      // Load messages for each conversation in parallel (cap at 30 threads).
-      // This gives us message count + the last-message timestamp.
+      // 2. Fetch messages for each conversation (parallel, capped at 30)
       final limited = convs.take(30).toList();
-
       final msgFutures = limited.map((c) =>
-        BuddyApiService.instance
-            .getConversationMessages(c.id)
-            .catchError((_) => <ConversationMessageModel>[]));
-
+          BuddyApiService.instance
+              .getConversationMessages(c.id)
+              .catchError((_) => <ConversationMessageModel>[]));
       final allMessages = await Future.wait(msgFutures);
 
-      final summaries = List.generate(limited.length, (i) {
-        final msgs  = allMessages[i];
-        final conv  = limited[i];
+      // 3. Flatten every message, then group by calendar day
+      final flat = allMessages.expand((msgs) => msgs).toList();
+      final Map<DateTime, List<ConversationMessageModel>> byDay = {};
 
-        // ── Derive timestamp ─────────────────────────────────────────────────
-        // Priority: conversation.updatedAt → last message createdAt → null
-        DateTime? lastAt;
-        final rawTs = conv.updatedAt ?? conv.createdAt;
-        if (rawTs != null) {
-          lastAt = _tryParseDate(rawTs);
-        } else if (msgs.isNotEmpty) {
-          final msgTs = msgs.last.createdAt;
-          if (msgTs != null) lastAt = _tryParseDate(msgTs);
+      for (final msg in flat) {
+        DateTime dayKey;
+        if (msg.createdAt != null) {
+          try {
+            final dt = DateTime.parse(msg.createdAt!).toLocal();
+            dayKey = DateTime(dt.year, dt.month, dt.day);
+          } catch (_) {
+            dayKey = DateTime(1970); // unknown date bucket
+          }
+        } else {
+          dayKey = DateTime(1970);
         }
+        byDay.putIfAbsent(dayKey, () => []).add(msg);
+      }
 
-        return _ConvSummary(
-          conv:         conv,
-          messageCount: msgs.length,
-          lastAt:       lastAt,
-        );
-      });
+      // 4. Sort days newest-first; discard the unknown-date bucket if empty
+      final days = byDay.keys
+          .where((d) => d.year != 1970 || (byDay[d]?.isNotEmpty ?? false))
+          .toList()
+        ..sort((a, b) => b.compareTo(a));
 
-      if (mounted) setState(() { _summaries = summaries; _loading = false; });
+      // If all messages lacked timestamps, fall back to one "All messages" session
+      if (days.isEmpty && flat.isNotEmpty) {
+        final fallback = _DaySession(date: DateTime(1970), messages: flat);
+        if (mounted) setState(() { _sessions = [fallback]; _loading = false; });
+        return;
+      }
+
+      final sessions = days.map((d) => _DaySession(
+        date:     d,
+        messages: List.unmodifiable(byDay[d]!),
+      )).toList();
+
+      if (mounted) setState(() { _sessions = sessions; _loading = false; });
     } catch (e) {
       if (mounted) setState(() {
         _error   = 'Could not load session history.\nCheck your connection and try again.';
         _loading = false;
       });
     }
-  }
-
-  DateTime? _tryParseDate(String s) {
-    try { return DateTime.parse(s).toLocal(); } catch (_) { return null; }
-  }
-
-  // ── Timestamp display ─────────────────────────────────────────────────────────
-  String _formatDate(DateTime? dt, int index) {
-    if (dt == null) {
-      // No timestamp from API — derive a label from list position
-      if (index == 0) return 'Most recent';
-      if (index == 1) return 'Previous';
-      return 'Earlier';
-    }
-    final now   = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final d     = DateTime(dt.year, dt.month, dt.day);
-    final h     = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final min   = dt.minute.toString().padLeft(2, '0');
-    final ampm  = dt.hour < 12 ? 'AM' : 'PM';
-    final time  = '$h:$min $ampm';
-
-    final diff = today.difference(d).inDays;
-    if (diff == 0) return 'Today, $time';
-    if (diff == 1) return 'Yesterday, $time';
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return '${months[dt.month - 1]} ${dt.day}, $time';
-  }
-
-  // ── Derive display title ──────────────────────────────────────────────────────
-  String _displayTitle(_ConvSummary s) {
-    final raw = s.conv.title;
-    if (raw != null && raw.trim().isNotEmpty && raw != 'Main') return raw.trim();
-    return 'Conversation #${s.conv.id}';
-  }
-
-  // ── Detail sheet ─────────────────────────────────────────────────────────────
-  void _showDetail(BuildContext context, _ConvSummary summary) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _ConversationDetailSheet(
-        summary: summary,
-        displayTitle: _displayTitle(summary),
-        formatDate: (dt) => _formatDate(dt, 0),
-      ),
-    );
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
@@ -190,7 +191,7 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
           const Spacer(),
           // Refresh
           GestureDetector(
-            onTap: _loadConversations,
+            onTap: _loadSessions,
             child: Container(
               width: 36, height: 36,
               margin: const EdgeInsets.only(right: 8),
@@ -223,8 +224,8 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
   // ── Body ──────────────────────────────────────────────────────────────────────
   Widget _buildBody(BuildContext context) {
     if (_loading) return _buildLoading();
-    if (_error != null) return _buildError();
-    final list = _summaries ?? [];
+    if (_error  != null) return _buildError();
+    final list = _sessions ?? [];
     if (list.isEmpty) return _buildEmpty();
     return _buildList(context, list);
   }
@@ -236,10 +237,7 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
         children: [
           SizedBox(
             width: 36, height: 36,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.5,
-              color: _verdigris,
-            ),
+            child: CircularProgressIndicator(strokeWidth: 2.5, color: _verdigris),
           ),
           const SizedBox(height: 16),
           Text('Loading sessions…',
@@ -258,14 +256,12 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
           children: [
             const Icon(Icons.wifi_off_rounded, color: _textSec, size: 48),
             const SizedBox(height: 16),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(color: _textSec, fontSize: 14, height: 1.5),
-            ),
+            Text(_error!,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(color: _textSec, fontSize: 14, height: 1.5)),
             const SizedBox(height: 20),
             GestureDetector(
-              onTap: _loadConversations,
+              onTap: _loadSessions,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 decoration: BoxDecoration(
@@ -302,130 +298,164 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
     );
   }
 
-  Widget _buildList(BuildContext context, List<_ConvSummary> list) {
+  Widget _buildList(BuildContext context, List<_DaySession> list) {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
       itemCount: list.length,
-      itemBuilder: (ctx, i) => _buildCard(ctx, list[i], i),
+      itemBuilder: (ctx, i) => _buildCard(ctx, list[i]),
     );
   }
 
-  // ── Conversation card ─────────────────────────────────────────────────────────
-  Widget _buildCard(BuildContext context, _ConvSummary s, int index) {
-    final dateLabel = _formatDate(s.lastAt, index);
-    final title     = _displayTitle(s);
+  // ── Session card (one per day) ─────────────────────────────────────────────
+  Widget _buildCard(BuildContext context, _DaySession session) {
+    final isToday     = session.dateLabel == 'Today';
+    final isYesterday = session.dateLabel == 'Yesterday';
+    final accentColor = isToday ? _verdigris : (isYesterday ? _amber : _textSec);
 
     return GestureDetector(
-      onTap: () => _showDetail(context, s),
+      onTap: () => _showDetail(context, session),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: _surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _border, width: 1),
+          border: Border.all(
+            color: isToday ? _verdigris.withOpacity(0.5) : _border,
+            width: isToday ? 1.5 : 1.0,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Meta row: date | message count ──────────────────────────────
+            // ── Top row: date badge | message count ─────────────────────────
             Row(
               children: [
-                // Clock + date
-                const Icon(Icons.access_time_rounded,
-                    color: _amber, size: 14),
-                const SizedBox(width: 5),
-                Text(
-                  dateLabel,
-                  style: GoogleFonts.inter(
-                    color: _amber,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: accentColor.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isToday
+                            ? Icons.today_rounded
+                            : Icons.calendar_today_rounded,
+                        color: accentColor,
+                        size: 12,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        session.dateLabel,
+                        style: GoogleFonts.inter(
+                          color: accentColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const Spacer(),
-                // Chat bubble + count
-                if (s.messageCount > 0) ...[
-                  const Icon(Icons.chat_bubble_outline_rounded,
+                // Message count pill
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.chat_bubble_outline_rounded,
+                          color: _textSec, size: 12),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${session.messageCount} messages',
+                        style: GoogleFonts.inter(
+                          color: _textSec,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // ── Time range ──────────────────────────────────────────────────
+            if (session.timeRange.isNotEmpty) ...[
+              Row(
+                children: [
+                  const Icon(Icons.access_time_rounded,
                       color: _textSec, size: 13),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 5),
                   Text(
-                    '${s.messageCount}',
+                    session.timeRange,
                     style: GoogleFonts.inter(
                       color: _textSec,
                       fontSize: 12,
-                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
-              ],
-            ),
-            const SizedBox(height: 10),
-            // ── Conversation title ───────────────────────────────────────────
-            Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(
-                color: _white,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                height: 1.45,
               ),
-            ),
+              const SizedBox(height: 8),
+            ],
+
+            // ── Preview: first user message ─────────────────────────────────
+            Builder(builder: (_) {
+              final firstUser = session.messages
+                  .where((m) => m.role == 'user')
+                  .firstOrNull;
+              if (firstUser == null) return const SizedBox.shrink();
+              return Text(
+                '"${firstUser.content}"',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(
+                  color: Colors.white54,
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  height: 1.45,
+                ),
+              );
+            }),
           ],
         ),
       ),
     );
   }
+
+  // ── Detail sheet ─────────────────────────────────────────────────────────────
+  void _showDetail(BuildContext context, _DaySession session) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _DaySessionDetailSheet(session: session),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Conversation Detail Bottom Sheet
-// Shows full message transcript for one conversation, loaded from the API.
+// Detail bottom sheet — shows all messages for one day
 // ─────────────────────────────────────────────────────────────────────────────
-class _ConversationDetailSheet extends StatefulWidget {
-  final _ConvSummary summary;
-  final String displayTitle;
-  final String Function(DateTime?) formatDate;
-
-  const _ConversationDetailSheet({
-    required this.summary,
-    required this.displayTitle,
-    required this.formatDate,
-  });
-
-  @override
-  State<_ConversationDetailSheet> createState() =>
-      _ConversationDetailSheetState();
-}
-
-class _ConversationDetailSheetState extends State<_ConversationDetailSheet> {
-  List<ConversationMessageModel>? _messages;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadMessages();
-  }
-
-  Future<void> _loadMessages() async {
-    try {
-      final msgs = await BuddyApiService.instance
-          .getConversationMessages(widget.summary.conv.id);
-      if (mounted) setState(() { _messages = msgs; _loading = false; });
-    } catch (_) {
-      if (mounted) setState(() { _messages = []; _loading = false; });
-    }
-  }
+class _DaySessionDetailSheet extends StatelessWidget {
+  final _DaySession session;
+  const _DaySessionDetailSheet({required this.session});
 
   @override
   Widget build(BuildContext context) {
     final screenH = MediaQuery.of(context).size.height;
 
     return Container(
-      constraints: BoxConstraints(maxHeight: screenH * 0.82),
+      constraints: BoxConstraints(maxHeight: screenH * 0.85),
       decoration: const BoxDecoration(
         color: Color(0xFF071512),
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -453,26 +483,25 @@ class _ConversationDetailSheetState extends State<_ConversationDetailSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(widget.displayTitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.poppins(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: _white)),
-                      if (widget.summary.lastAt != null) ...[
-                        const SizedBox(height: 3),
-                        Row(children: [
-                          const Icon(Icons.access_time_rounded,
-                              color: _amber, size: 12),
-                          const SizedBox(width: 4),
-                          Text(
-                            widget.formatDate(widget.summary.lastAt),
-                            style: GoogleFonts.inter(
-                                color: _amber, fontSize: 11),
-                          ),
-                        ]),
-                      ],
+                      Text(
+                        '${session.dateLabel}\'s Session',
+                        style: GoogleFonts.poppins(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: _white),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(children: [
+                        const Icon(Icons.access_time_rounded,
+                            color: _amber, size: 12),
+                        const SizedBox(width: 4),
+                        Text(
+                          session.timeRange.isNotEmpty
+                              ? session.timeRange
+                              : '${session.messageCount} messages',
+                          style: GoogleFonts.inter(color: _amber, fontSize: 11),
+                        ),
+                      ]),
                     ],
                   ),
                 ),
@@ -495,41 +524,28 @@ class _ConversationDetailSheetState extends State<_ConversationDetailSheet> {
           const Divider(color: Color(0xFF1C3430), height: 1),
 
           // Messages
-          Flexible(child: _buildMessages()),
+          Flexible(
+            child: session.messages.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(40),
+                    child: Center(
+                      child: Text('No messages',
+                          style: GoogleFonts.inter(
+                              color: _textSec, fontSize: 14)),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    itemCount: session.messages.length,
+                    itemBuilder: (_, i) => _buildBubble(context, session.messages[i]),
+                  ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMessages() {
-    if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.all(40),
-        child: Center(
-            child: CircularProgressIndicator(
-                strokeWidth: 2, color: _verdigris)),
-      );
-    }
-
-    final msgs = _messages ?? [];
-    if (msgs.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.all(40),
-        child: Center(
-          child: Text('No messages in this session',
-              style: GoogleFonts.inter(color: _textSec, fontSize: 14)),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      itemCount: msgs.length,
-      itemBuilder: (_, i) => _buildBubble(msgs[i]),
-    );
-  }
-
-  Widget _buildBubble(ConversationMessageModel msg) {
+  Widget _buildBubble(BuildContext context, ConversationMessageModel msg) {
     final isUser = msg.role == 'user';
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -556,16 +572,43 @@ class _ConversationDetailSheetState extends State<_ConversationDetailSheet> {
                   : const Color(0xFF1F3A36),
             ),
           ),
-          child: Text(
-            msg.content,
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              color: isUser ? _white : const Color(0xFFD0D0D0),
-              height: 1.5,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                msg.content,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: isUser ? _white : const Color(0xFFD0D0D0),
+                  height: 1.5,
+                ),
+              ),
+              if (msg.createdAt != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _bubbleTime(msg.createdAt!),
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    color: Colors.white24,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       ),
     );
+  }
+
+  static String _bubbleTime(String iso) {
+    try {
+      final dt   = DateTime.parse(iso).toLocal();
+      final h    = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final min  = dt.minute.toString().padLeft(2, '0');
+      final ampm = dt.hour < 12 ? 'AM' : 'PM';
+      return '$h:$min $ampm';
+    } catch (_) {
+      return '';
+    }
   }
 }
