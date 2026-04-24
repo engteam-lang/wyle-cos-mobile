@@ -93,69 +93,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
 
   Future<void> _signInWithGoogle() async {
     _setLoading('google');
+
     try {
-      // ── Step 1: ask Wyle backend for the real Google OAuth URL ─────────────
-      Map<String, dynamic>? oauthData;
-      try {
-        oauthData = await BuddyApiService.instance.startOAuth('google');
-      } catch (_) { /* backend unreachable — fall through */ }
+      final oauthData =
+          await BuddyApiService.instance.startOAuth('google');
 
-      final authUrl = oauthData?['auth_url'] as String?;
+      final authUrl = oauthData?['auth_url'];
 
-      if (authUrl != null && authUrl.isNotEmpty) {
-        // Web keeps browser redirect flow. Mobile uses in-app WebView to capture
-        // callback token and complete login without manual copy/paste.
-        if (kIsWeb) {
-          final launched = await launchUrl(
-            Uri.parse(authUrl),
-            mode: LaunchMode.platformDefault,
-          );
-          if (!launched && mounted) {
-            _setError('Could not open the sign-in page. Try again.');
-          }
-          _clearLoading();
-          return;
-        }
-
-        final oauthResult = await Navigator.of(context).push<_OAuthCaptureResult>(
-          MaterialPageRoute(
-            fullscreenDialog: true,
-            builder: (_) => _GoogleOAuthWebViewScreen(initialUrl: authUrl),
-          ),
-        );
-
-        if (!mounted) return;
-        if (oauthResult != null && oauthResult.token.isNotEmpty) {
-          await _completeOAuthTokenSignIn(
-            oauthResult.token,
-            userId: oauthResult.userId,
-          );
-          _clearLoading();
-          return;
-        }
-
-        _setError('Google sign-in was cancelled. Please try again.');
-        _clearLoading();
-        return;
+      if (authUrl == null || authUrl.isEmpty) {
+        throw Exception('No auth URL returned');
       }
 
-      // ── Fallback: direct Google sign-in (no Wyle backend) ──────────────────
-      final result = await GoogleAuthService.instance.signIn();
-      if (!mounted) return;
-      if (result.success) {
-        await _completeAuth(
-          id:       result.id    ?? result.email,
-          name:     result.displayName ?? result.email.split('@').first,
-          email:    result.email,
-          provider: 'google',
-          apiToken: result.accessToken,
-        );
-      } else {
-        _setError(result.error == 'Cancelled'
-            ? 'Sign-in was cancelled.'
-            : 'Google sign-in failed. Try again.');
+      // ✅ Always use external browser (NO WebView)
+      final launched = await launchUrl(
+        Uri.parse(authUrl),
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched && mounted) {
+        _setError('Could not open the sign-in page.');
       }
-    } catch (_) {
+
+      // ⛔ DO NOT complete login here
+      // Deep link will handle it
+
+    } catch (e) {
       _setError('Google sign-in failed. Try again.');
     } finally {
       _clearLoading();
@@ -1061,14 +1023,26 @@ class _GoogleOAuthWebViewScreenState extends State<_GoogleOAuthWebViewScreen> {
 
     try {
       final uri = Uri.parse(raw);
-      final token = uri.queryParameters['token'] ?? uri.queryParameters['access_token'];
-      final userId = uri.queryParameters['user_id'] ?? uri.queryParameters['user_public_id'];
+      String? token = uri.queryParameters['auth_token'] ??
+          uri.queryParameters['token'] ??
+          uri.queryParameters['access_token'];
+      String? userId = uri.queryParameters['user_id'] ?? uri.queryParameters['user_public_id'];
+
+      // Support hash-based callback URLs: /#/auth-callback?auth_token=...
+      if ((token == null || token.isEmpty) && uri.fragment.contains('?')) {
+        final queryPart = uri.fragment.substring(uri.fragment.indexOf('?') + 1);
+        final fragmentQuery = Uri.splitQueryString(queryPart);
+        token = fragmentQuery['auth_token'] ??
+            fragmentQuery['token'] ??
+            fragmentQuery['access_token'];
+        userId ??= fragmentQuery['user_id'] ?? fragmentQuery['user_public_id'];
+      }
       if (token != null && token.isNotEmpty) {
         return _OAuthCaptureResult(token: token, userId: userId);
       }
     } catch (_) {}
 
-    final tokenMatch = RegExp(r'"(?:access_token|token)"\s*:\s*"([^"]+)"')
+    final tokenMatch = RegExp(r'"(?:auth_token|access_token|token)"\s*:\s*"([^"]+)"')
         .firstMatch(raw);
     if (tokenMatch != null) {
       final token = tokenMatch.group(1)!;
