@@ -1450,32 +1450,29 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
                 }),
               ),
               const SizedBox(height: 36),
-              SizedBox(
-                height: 56,
-                child: AnimatedOpacity(
-                  opacity: widget.partialText.isNotEmpty ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 40),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.08)),
-                    ),
-                    child: Text(
-                      widget.partialText.isNotEmpty
-                          ? '"${widget.partialText}"'
-                          : '',
-                      textAlign: TextAlign.center,
-                      maxLines: 2, overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                          color: Colors.white.withOpacity(0.88),
-                          fontSize: 14, fontStyle: FontStyle.italic,
-                          height: 1.5),
-                    ),
+              AnimatedOpacity(
+                opacity: widget.partialText.isNotEmpty ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 40),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: Colors.white.withOpacity(0.08)),
+                  ),
+                  child: Text(
+                    widget.partialText.isNotEmpty
+                        ? '"${widget.partialText}"'
+                        : '',
+                    textAlign: TextAlign.center,
+                    // No maxLines / no ellipsis — show the full transcript
+                    style: GoogleFonts.inter(
+                        color: Colors.white.withOpacity(0.88),
+                        fontSize: 14, fontStyle: FontStyle.italic,
+                        height: 1.5),
                   ),
                 ),
               ),
