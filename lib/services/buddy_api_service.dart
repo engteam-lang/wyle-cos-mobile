@@ -253,9 +253,10 @@ class BuddyApiService {
   Future<ActionItemModel> markActionItemDone(int itemId) =>
       updateActionItem(itemId, {'status': 'done'});
 
-  /// DELETE /v1/action-items/{id} — returns 204, no body
+  /// "Delete" an action item — backend only supports PATCH, so we mark it
+  /// as done (status: done) which removes it from the active inbox.
   Future<void> deleteActionItem(int itemId) async {
-    await _dio.delete('/action-items/$itemId');
+    await _dio.patch('/action-items/$itemId', data: {'status': 'done'});
   }
 
   // ══════════════════════════════════════════════════════════════════════════
