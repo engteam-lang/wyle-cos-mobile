@@ -35,16 +35,17 @@
 
             <!--
                 OAuth deep-link callback
-                Backend redirects to: com.wyle.wylecosapp://auth-callback?token=<JWT>
-                after successful Google / Microsoft OAuth.
+                Backend must redirect to:
+                  com.wyle.buddy://oauth-callback?auth_token=<JWT>&user_public_id=<id>
+                Android intercepts this URL and re-opens the app.
             -->
-            <intent-filter>
+            <intent-filter android:autoVerify="false">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data
-                    android:scheme="com.wyle.wylecosapp"
-                    android:host="auth-callback"/>
+                    android:scheme="com.wyle.buddy"
+                    android:host="oauth-callback"/>
             </intent-filter>
 
         </activity>

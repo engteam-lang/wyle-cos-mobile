@@ -67,8 +67,17 @@ class BuddyApiService {
   // ══════════════════════════════════════════════════════════════════════════
 
   /// Returns { "auth_url": "...", "state": "..." }
-  Future<Map<String, dynamic>> startOAuth(String provider) async {
-    final res = await _dio.post('/auth/oauth/$provider/start');
+  ///
+  /// Passes [mobileRedirectUri] so the backend redirects back to the app
+  /// after OAuth instead of a web URL.
+  /// Default:  com.wyle.buddy://oauth-callback
+  Future<Map<String, dynamic>> startOAuth(
+    String provider, {
+    String mobileRedirectUri = 'com.wyle.buddy://oauth-callback',
+  }) async {
+    final res = await _dio.post('/auth/oauth/$provider/start', data: {
+      'mobile_redirect_uri': mobileRedirectUri,
+    });
     return res.data as Map<String, dynamic>;
   }
 
