@@ -1761,7 +1761,7 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
                     const SizedBox(height: 10),
                     ...active.map((o) => _taskCard(o, isUrgent: false)),
                   ],
-                  if (widget.obligations.isEmpty)
+                  if (obligations.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 32),
                       child: Center(
