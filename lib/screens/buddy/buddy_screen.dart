@@ -1158,6 +1158,10 @@ Currency: AED. Context: Dubai, UAE.''';
                   hintStyle: GoogleFonts.inter(
                       color: _textTer, fontSize: 14),
                   border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  filled: true,
+                  fillColor: Colors.transparent,
                   contentPadding: const EdgeInsets.symmetric(
                       horizontal: 4, vertical: 14),
                 ),
