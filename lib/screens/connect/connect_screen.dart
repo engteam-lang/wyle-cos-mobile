@@ -169,49 +169,55 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
     final assetPath = isMale
         ? 'assets/avatars/buddy_male.png'
         : 'assets/avatars/buddy_female.png';
-    return Column(
-      children: [
-        Container(
-          width: 80, height: 80,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFF0A2A38),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF1B998B).withOpacity(0.28),
-                blurRadius: 20, spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: ClipOval(
-            child: Image.asset(
-              assetPath,
-              width: 80,
-              height: 80,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Center(
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : 'W',
-                  style: GoogleFonts.poppins(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+    return Center(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 80, height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF0A2A38),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF1B998B).withOpacity(0.28),
+                  blurRadius: 20, spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: ClipOval(
+              child: Image.asset(
+                assetPath,
+                width: 80,
+                height: 80,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Center(
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : 'W',
+                    style: GoogleFonts.poppins(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 14),
-        Text(name,
-            style: GoogleFonts.poppins(
-                fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
-        const SizedBox(height: 4),
-        Text(role,
-            style: GoogleFonts.poppins(
-                fontSize: 13, color: const Color(0xFF7AACB8))),
-        const SizedBox(height: 4),
-      ],
+          const SizedBox(height: 14),
+          Text(name,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                  fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white)),
+          const SizedBox(height: 4),
+          if (role.isNotEmpty)
+            Text(role,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                    fontSize: 13, color: const Color(0xFF7AACB8))),
+          const SizedBox(height: 4),
+        ],
+      ),
     );
   }
 
