@@ -737,10 +737,7 @@ Currency: AED. Context: Dubai, UAE.''';
           ],
           const SizedBox(height: 10),
           GestureDetector(
-            onTap: () => _showTasksBottomSheet(
-              context,
-              ref.read(activeObligationsProvider),
-            ),
+            onTap: () => _showTasksBottomSheet(context),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
@@ -903,7 +900,7 @@ Currency: AED. Context: Dubai, UAE.''';
         children: [
           // ── Tasks FAB — green gradient + badge ─────────────────────────
           GestureDetector(
-            onTap: () => _showTasksBottomSheet(context, obligations),
+            onTap: () => _showTasksBottomSheet(context),
             child: Stack(
               clipBehavior: Clip.none,
               children: [
@@ -974,13 +971,13 @@ Currency: AED. Context: Dubai, UAE.''';
   }
 
   // ── Tasks bottom sheet ────────────────────────────────────────────────────
-  void _showTasksBottomSheet(
-      BuildContext context, List<ObligationModel> obligations) {
+  void _showTasksBottomSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _TasksBottomSheet(obligations: obligations),
+      // No obligations param — sheet watches activeObligationsProvider directly
+      builder: (_) => const _TasksBottomSheet(),
     );
   }
 
@@ -1581,8 +1578,8 @@ class _BlinkingDotState extends State<_BlinkingDot>
 // Tasks Bottom Sheet — Tasks + Insights tabs, urgent + active groups
 // ─────────────────────────────────────────────────────────────────────────────
 class _TasksBottomSheet extends ConsumerStatefulWidget {
-  final List<ObligationModel> obligations;
-  const _TasksBottomSheet({required this.obligations});
+  // No constructor param needed — reads live from activeObligationsProvider
+  const _TasksBottomSheet();
 
   @override
   ConsumerState<_TasksBottomSheet> createState() => _TasksBottomSheetState();
@@ -1598,10 +1595,13 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final urgent = widget.obligations
+    // Watch the same provider the FAB badge uses — both counts are always in sync
+    final obligations = ref.watch(activeObligationsProvider);
+
+    final urgent = obligations
         .where((o) => o.daysUntil <= 0 || o.risk == 'high')
         .toList();
-    final active = widget.obligations
+    final active = obligations
         .where((o) => !(o.daysUntil <= 0 || o.risk == 'high'))
         .toList();
 
@@ -1659,7 +1659,7 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                                 color: _tab == 0 ? _verdigris : _textSec)),
-                        if (widget.obligations.isNotEmpty) ...[
+                        if (obligations.isNotEmpty) ...[
                           const SizedBox(width: 6),
                           Container(
                             width: 20, height: 20,
@@ -1668,7 +1668,7 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
                             ),
                             child: Center(
                               child: Text(
-                                '${widget.obligations.length}',
+                                '${obligations.length > 9 ? '9+' : obligations.length}',
                                 style: GoogleFonts.inter(
                                     color: _white, fontSize: 9,
                                     fontWeight: FontWeight.w800),
