@@ -12,6 +12,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../../models/chat_message_model.dart';
 import '../../models/conversation_model.dart';
+import '../../models/insights_summary_model.dart';
 import '../../models/obligation_model.dart';
 import '../../navigation/app_router.dart';
 import '../../providers/app_state.dart';
@@ -1579,16 +1580,21 @@ class _BlinkingDotState extends State<_BlinkingDot>
 // ─────────────────────────────────────────────────────────────────────────────
 // Tasks Bottom Sheet — Tasks + Insights tabs, urgent + active groups
 // ─────────────────────────────────────────────────────────────────────────────
-class _TasksBottomSheet extends StatefulWidget {
+class _TasksBottomSheet extends ConsumerStatefulWidget {
   final List<ObligationModel> obligations;
   const _TasksBottomSheet({required this.obligations});
 
   @override
-  State<_TasksBottomSheet> createState() => _TasksBottomSheetState();
+  ConsumerState<_TasksBottomSheet> createState() => _TasksBottomSheetState();
 }
 
-class _TasksBottomSheetState extends State<_TasksBottomSheet> {
+class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
   int _tab = 0; // 0 = Tasks, 1 = Insights
+
+  // ── Insights state ──────────────────────────────────────────────────────────
+  InsightsSummaryModel? _insights;
+  bool   _insightsLoading = false;
+  String? _insightsError;
 
   @override
   Widget build(BuildContext context) {
@@ -1677,15 +1683,34 @@ class _TasksBottomSheetState extends State<_TasksBottomSheet> {
                 const SizedBox(width: 8),
                 // Insights tab
                 GestureDetector(
-                  onTap: () => setState(() => _tab = 1),
-                  child: Padding(
+                  onTap: () {
+                    setState(() => _tab = 1);
+                    if (_insights == null && !_insightsLoading) {
+                      _fetchInsights();
+                    }
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: _tab == 1
+                          ? const Color(0xFF1A2E0A)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _tab == 1
+                            ? const Color(0xFFD5FF3F).withOpacity(0.4)
+                            : Colors.transparent,
+                      ),
+                    ),
                     child: Text('Insights',
                         style: GoogleFonts.poppins(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: _tab == 1 ? _white : _textSec)),
+                            color: _tab == 1
+                                ? const Color(0xFFD5FF3F)
+                                : _textSec)),
                   ),
                 ),
                 const Spacer(),
@@ -1752,14 +1777,279 @@ class _TasksBottomSheetState extends State<_TasksBottomSheet> {
               ),
             )
           else
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 32),
-              child: Center(
-                child: Text('Insights coming soon',
+            Flexible(child: _buildInsightsTab()),
+        ],
+      ),
+    );
+  }
+
+  // ── Fetch insights from API ─────────────────────────────────────────────────
+  Future<void> _fetchInsights() async {
+    setState(() { _insightsLoading = true; _insightsError = null; });
+    try {
+      final data = await BuddyApiService.instance.getInsightsSummary();
+      if (mounted) setState(() { _insights = data; _insightsLoading = false; });
+    } catch (e) {
+      if (mounted) setState(() {
+        _insightsError = 'Could not load insights.\nTap to retry.';
+        _insightsLoading = false;
+      });
+    }
+  }
+
+  // ── Insights tab UI ─────────────────────────────────────────────────────────
+  Widget _buildInsightsTab() {
+    if (_insightsLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(48),
+        child: Center(
+          child: CircularProgressIndicator(
+            color: Color(0xFFD5FF3F), strokeWidth: 2.5),
+        ),
+      );
+    }
+    if (_insightsError != null) {
+      return Padding(
+        padding: const EdgeInsets.all(40),
+        child: Center(
+          child: GestureDetector(
+            onTap: _fetchInsights,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.wifi_off_rounded,
+                    color: _textSec, size: 40),
+                const SizedBox(height: 12),
+                Text(_insightsError!,
+                    textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
-                        color: _textSec, fontSize: 14)),
+                        color: _textSec, fontSize: 13, height: 1.5)),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A3A2A),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text('Retry',
+                      style: GoogleFonts.poppins(
+                          color: const Color(0xFFD5FF3F),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final d = _insights;
+    if (d == null) {
+      return const SizedBox.shrink();
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+      children: [
+        // ── Life Operating Score ──────────────────────────────────────────
+        _insightScoreCard(d.productivityScore),
+        const SizedBox(height: 14),
+
+        // ── 2×2 stat grid ─────────────────────────────────────────────────
+        Row(
+          children: [
+            Expanded(child: _statTile(
+              icon: Icons.bolt_rounded,
+              iconColor: const Color(0xFFD5A820),
+              value: d.hoursSavedEstimate % 1 == 0
+                  ? '${d.hoursSavedEstimate.toInt()} hours'
+                  : '${d.hoursSavedEstimate.toStringAsFixed(1)} hours',
+              label: 'Time Saved',
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _statTile(
+              icon: Icons.check_circle_outline_rounded,
+              iconColor: const Color(0xFF1B998B),
+              value: '${d.tasksDone}',
+              label: 'Tasks Done',
+            )),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: _statTile(
+              icon: Icons.calendar_today_rounded,
+              iconColor: const Color(0xFFD5A820),
+              value: '${d.meetingsCount}',
+              label: 'Meetings',
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _statTile(
+              icon: Icons.trending_up_rounded,
+              iconColor: const Color(0xFF1B998B),
+              value: '${d.messagesCount}',
+              label: 'Messages',
+            )),
+          ],
+        ),
+        const SizedBox(height: 14),
+
+        // ── Weekly Pattern ────────────────────────────────────────────────
+        if (d.weeklyPattern.insightText.isNotEmpty)
+          _weeklyPatternCard(d.weeklyPattern),
+      ],
+    );
+  }
+
+  Widget _insightScoreCard(int score) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A2218),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: const Color(0xFFD5FF3F).withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Life Operating Score',
+                    style: GoogleFonts.poppins(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: _white)),
+                const SizedBox(height: 6),
+                Text(
+                  _scoreSubtitle(score),
+                  style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: const Color(0xFF7AACB8),
+                      height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Container(
+            width: 62, height: 62,
+            decoration: const BoxDecoration(
+              color: Color(0xFFD5FF3F),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '$score',
+                style: GoogleFonts.poppins(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF001A0A)),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _scoreSubtitle(int score) {
+    if (score >= 85) return 'Excellent! Keep up the great work.';
+    if (score >= 70) return 'Your productivity is on a strong track.';
+    if (score >= 50) return 'Good progress — a few more wins await.';
+    return 'Let\'s work on improving your productivity.';
+  }
+
+  Widget _statTile({
+    required IconData icon,
+    required Color iconColor,
+    required String value,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A2218),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF1A3A28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: iconColor, size: 20),
+          const SizedBox(height: 8),
+          Text(value,
+              style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: _white)),
+          const SizedBox(height: 2),
+          Text(label,
+              style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: const Color(0xFF7AACB8))),
+        ],
+      ),
+    );
+  }
+
+  Widget _weeklyPatternCard(WeeklyPatternData pattern) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A2218),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF1A3A28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.insights_rounded,
+                  color: Color(0xFF1B998B), size: 16),
+              const SizedBox(width: 7),
+              Text('Weekly Pattern',
+                  style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: _white)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            pattern.insightText,
+            style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: const Color(0xFF7AACB8),
+                height: 1.55),
+          ),
+          if (pattern.bestDays.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: pattern.bestDays.map((day) => Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD5FF3F).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: const Color(0xFFD5FF3F).withOpacity(0.3)),
+                ),
+                child: Text(day,
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFFD5FF3F))),
+              )).toList(),
+            ),
+          ],
         ],
       ),
     );
