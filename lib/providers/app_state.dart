@@ -403,5 +403,8 @@ final isAuthenticatedProvider = Provider<bool>((ref) {
 
 final buddyAvatarGenderProvider = Provider<String>((ref) {
   final user = ref.watch(appStateProvider).user;
+  // Prefer the explicit gender field from /v1/users/me; fall back to inference.
+  final apiGender = user?.gender?.toLowerCase();
+  if (apiGender == 'male' || apiGender == 'female') return apiGender;
   return inferAvatarGender(name: user?.name, email: user?.email);
 });

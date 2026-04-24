@@ -3,6 +3,8 @@ class UserModel {
   final String name;
   final String email;
   final String? phone;
+  final String? gender;       // 'male' | 'female' | null — from API /v1/users/me
+  final String? designation;  // job title from API /v1/users/me
   final bool onboardingComplete;
   final int onboardingStep;
   final UserPreferences preferences;
@@ -14,6 +16,8 @@ class UserModel {
     required this.name,
     required this.email,
     this.phone,
+    this.gender,
+    this.designation,
     this.onboardingComplete = false,
     this.onboardingStep = 0,
     required this.preferences,
@@ -26,6 +30,8 @@ class UserModel {
     String? name,
     String? email,
     String? phone,
+    String? gender,
+    String? designation,
     bool? onboardingComplete,
     int? onboardingStep,
     UserPreferences? preferences,
@@ -37,6 +43,8 @@ class UserModel {
       name:               name               ?? this.name,
       email:              email              ?? this.email,
       phone:              phone              ?? this.phone,
+      gender:             gender             ?? this.gender,
+      designation:        designation        ?? this.designation,
       onboardingComplete: onboardingComplete ?? this.onboardingComplete,
       onboardingStep:     onboardingStep     ?? this.onboardingStep,
       preferences:        preferences        ?? this.preferences,
@@ -47,10 +55,12 @@ class UserModel {
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id:                 json['_id'] ?? json['id'] ?? '',
-      name:               json['name'] ?? '',
+      id:                 json['_id'] ?? json['id'] ?? json['public_id'] ?? '',
+      name:               json['name'] ?? json['full_name'] ?? '',
       email:              json['email'] ?? '',
-      phone:              json['phone'],
+      phone:              json['phone'] as String?,
+      gender:             json['gender'] as String?,
+      designation:        json['designation'] as String?,
       onboardingComplete: json['onboardingComplete'] ?? false,
       onboardingStep:     json['onboardingStep'] ?? 0,
       preferences: json['preferences'] != null
@@ -68,6 +78,8 @@ class UserModel {
     'name':              name,
     'email':             email,
     'phone':             phone,
+    'gender':            gender,
+    'designation':       designation,
     'onboardingComplete':onboardingComplete,
     'onboardingStep':    onboardingStep,
     'preferences':       preferences.toJson(),

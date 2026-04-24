@@ -42,17 +42,21 @@ class AuthService {
       // API unreachable or token not yet valid — build user from token data
     }
 
-    final email    = profile?['email']     as String? ?? '';
-    final fullName = profile?['full_name'] as String?
+    final email       = profile?['email']       as String? ?? '';
+    final fullName    = profile?['full_name']   as String?
         ?? (email.isNotEmpty ? email.split('@').first : 'Wyle User');
-    final pubId    = profile?['public_id'] as String?
+    final pubId       = profile?['public_id']   as String?
         ?? userId
         ?? token.substring(0, token.length.clamp(0, 8));
+    final gender      = profile?['gender']      as String?;
+    final designation = profile?['designation'] as String?;
 
     final user = UserModel(
       id:                 pubId,
       name:               fullName,
       email:              email,
+      gender:             gender,
+      designation:        designation,
       onboardingComplete: true,
       onboardingStep:     0,
       preferences:        const UserPreferences(),

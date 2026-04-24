@@ -68,9 +68,9 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
     final user  = state.user;
-    final name  = user?.name ?? 'User';
-    final gender = ref.watch(buddyAvatarGenderProvider);
-    const role  = '';
+    final name        = user?.name ?? 'User';
+    final gender      = ref.watch(buddyAvatarGenderProvider);
+    final role        = user?.designation ?? '';
 
     return Scaffold(
       backgroundColor: kProfileBg,
