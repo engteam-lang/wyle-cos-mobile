@@ -83,6 +83,7 @@ mixin ComingSoonMixin<T extends StatefulWidget> on State<T> {
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
+                          decoration: TextDecoration.none,
                         )),
                     const SizedBox(height: 8),
                     Text(
@@ -92,6 +93,7 @@ mixin ComingSoonMixin<T extends StatefulWidget> on State<T> {
                         fontSize: 13,
                         color: const Color(0xFFCB9A2D),
                         height: 1.5,
+                        decoration: TextDecoration.none,
                       ),
                     ),
                   ],

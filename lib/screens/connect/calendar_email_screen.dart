@@ -174,6 +174,7 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
+                          decoration: TextDecoration.none,
                         )),
                     const SizedBox(height: 8),
                     Text(
@@ -183,6 +184,7 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
                         fontSize: 13,
                         color: const Color(0xFFCB9A2D),
                         height: 1.5,
+                        decoration: TextDecoration.none,
                       ),
                     ),
                   ],
