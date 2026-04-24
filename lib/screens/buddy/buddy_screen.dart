@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../../models/chat_message_model.dart';
@@ -1591,7 +1592,8 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
 
   // ── Insights state ──────────────────────────────────────────────────────────
   InsightsSummaryModel? _insights;
-  bool   _insightsLoading = false;
+  bool   _insightsLoading    = false;
+  bool   _insightsComingSoon = false;   // true when backend returns 404
   String? _insightsError;
 
   @override
@@ -1786,20 +1788,66 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
 
   // ── Fetch insights from API ─────────────────────────────────────────────────
   Future<void> _fetchInsights() async {
-    setState(() { _insightsLoading = true; _insightsError = null; });
+    setState(() {
+      _insightsLoading    = true;
+      _insightsError      = null;
+      _insightsComingSoon = false;
+    });
     try {
       final data = await BuddyApiService.instance.getInsightsSummary();
       if (mounted) setState(() { _insights = data; _insightsLoading = false; });
     } catch (e) {
-      if (mounted) setState(() {
-        _insightsError = 'Could not load insights.\nTap to retry.';
-        _insightsLoading = false;
+      if (!mounted) return;
+      // 404 → endpoint not yet live on the backend
+      final is404 = e is DioException &&
+          e.response?.statusCode == 404;
+      setState(() {
+        _insightsLoading    = false;
+        _insightsComingSoon = is404;
+        _insightsError      = is404 ? null : 'Could not load insights.\nTap to retry.';
       });
     }
   }
 
   // ── Insights tab UI ─────────────────────────────────────────────────────────
   Widget _buildInsightsTab() {
+    if (_insightsComingSoon) {
+      return Padding(
+        padding: const EdgeInsets.all(40),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64, height: 64,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A2A1A),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: const Color(0xFFD5FF3F).withOpacity(0.3)),
+                ),
+                child: const Center(
+                  child: Text('🚀', style: TextStyle(fontSize: 28)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text('Insights Coming Soon',
+                  style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Text(
+                'Your productivity stats will appear\nhere once the feature goes live.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                    color: _textSec, fontSize: 13, height: 1.5),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     if (_insightsLoading) {
       return const Padding(
         padding: EdgeInsets.all(48),
