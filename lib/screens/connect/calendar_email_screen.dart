@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -34,28 +35,26 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
   static const _gmailEmail   = 'you@gmail.com';
   static const _outlookEmail = 'you@outlook.com';
 
+  // ── Coming-soon overlay ────────────────────────────────────────────────────
+  bool   _showComingSoon     = false;
+  String _comingSoonProvider = '';
+  Timer? _comingSoonTimer;
+
+  void _showComingSoonPopup(String providerLabel) {
+    _comingSoonTimer?.cancel();
+    setState(() {
+      _comingSoonProvider = providerLabel;
+      _showComingSoon     = true;
+    });
+    _comingSoonTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showComingSoon = false);
+    });
+  }
+
   // ── Connect helpers with API calls ─────────────────────────────────────────
 
-  Future<void> _connectGmail() async {
-    setState(() => _gmailSyncing = true);
-    try {
-      // Trigger demo sync-stub (real sync needs OAuth-linked account)
-      await BuddyApiService.instance.triggerEmailSyncStub(provider: 'gmail');
-    } catch (_) {
-      // API not reachable — still mark connected so UI works offline
-    } finally {
-      if (mounted) setState(() { _gmailConnected = true; _gmailSyncing = false; });
-    }
-  }
-
-  Future<void> _connectOutlook() async {
-    setState(() => _outlookSyncing = true);
-    try {
-      await BuddyApiService.instance.triggerEmailSyncStub(provider: 'microsoft');
-    } catch (_) { /* offline — ok */ } finally {
-      if (mounted) setState(() { _outlookConnected = true; _outlookSyncing = false; });
-    }
-  }
+  void _connectGmail()   => _showComingSoonPopup('Gmail');
+  void _connectOutlook() => _showComingSoonPopup('Outlook');
 
   @override
   void initState() {
@@ -72,50 +71,126 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
   @override
   void dispose() {
     _enterCtrl.dispose();
+    _comingSoonTimer?.cancel();
     super.dispose();
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: kProfileBg,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: kProfileGradient,
-        child: SafeArea(
-        child: FadeTransition(
-          opacity: _fadeAnim,
-          child: SlideTransition(
-            position: _slideAnim,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(context),
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: const ClampingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSectionLabel('Email Providers'),
-                        const SizedBox(height: 12),
-                        _buildGmailCard(),
-                        const SizedBox(height: 14),
-                        _buildOutlookCard(),
-                        const SizedBox(height: 28),
-                        _buildInfoNote(),
-                      ],
-                    ),
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: kProfileBg,
+          body: Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: kProfileGradient,
+            child: SafeArea(
+              child: FadeTransition(
+                opacity: _fadeAnim,
+                child: SlideTransition(
+                  position: _slideAnim,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(context),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const ClampingScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildSectionLabel('Email Providers'),
+                              const SizedBox(height: 12),
+                              _buildGmailCard(),
+                              const SizedBox(height: 14),
+                              _buildOutlookCard(),
+                              const SizedBox(height: 28),
+                              _buildInfoNote(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
+        if (_showComingSoon) _buildComingSoonOverlay(),
+      ],
+    );
+  }
+
+  // ── Coming-soon overlay ────────────────────────────────────────────────────
+  Widget _buildComingSoonOverlay() {
+    return Positioned.fill(
+      child: GestureDetector(
+        onTap: () {
+          _comingSoonTimer?.cancel();
+          setState(() => _showComingSoon = false);
+        },
+        child: Container(
+          color: Colors.black.withOpacity(0.55),
+          child: Center(
+            child: GestureDetector(
+              onTap: () {}, // prevent tap-through
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 28),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF001A24),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFCB9A2D), width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFCB9A2D).withOpacity(0.18),
+                      blurRadius: 32,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 56, height: 56,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A2A10),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                            color: const Color(0xFFCB9A2D).withOpacity(0.4)),
+                      ),
+                      child: const Center(
+                        child: Text('🚀', style: TextStyle(fontSize: 24)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Coming Soon',
+                        style: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        )),
+                    const SizedBox(height: 8),
+                    Text(
+                      '$_comingSoonProvider integration\nis on its way!',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: const Color(0xFFCB9A2D),
+                        height: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -235,9 +310,9 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
           if (!c) ...[
             const SizedBox(height: 16),
             _connectBtn(
-              label: _gmailSyncing ? 'Connecting…' : 'Connect Gmail',
+              label: 'Connect Gmail',
               color: const Color(0xFF22C55E),
-              onTap: _gmailSyncing ? null : _connectGmail,
+              onTap: _connectGmail,
             ),
           ] else ...[
             const SizedBox(height: 14),
@@ -329,9 +404,9 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
           if (!c) ...[
             const SizedBox(height: 16),
             _connectBtn(
-              label: _outlookSyncing ? 'Connecting…' : 'Connect Outlook',
+              label: 'Connect Outlook',
               color: const Color(0xFF3B82F6),
-              onTap: _outlookSyncing ? null : _connectOutlook,
+              onTap: _connectOutlook,
             ),
           ] else ...[
             const SizedBox(height: 14),

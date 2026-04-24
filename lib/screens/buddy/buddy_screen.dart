@@ -639,7 +639,7 @@ Currency: AED. Context: Dubai, UAE.''';
           // WYLE logo
           Image.asset(
             'assets/logos/wyle_logo_white.png',
-            height: 26,
+            height: 36,
             fit: BoxFit.contain,
           ),
           const Spacer(),
