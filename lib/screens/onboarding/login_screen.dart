@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -32,6 +33,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   String? _loadingProvider;
   String? _errorMessage;
   String _selectedLang = 'English';
+
+  // Coming-soon overlay
+  bool    _showComingSoon     = false;
+  String  _comingSoonProvider = '';
+  Timer?  _comingSoonTimer;
 
   // Shimmer on WYLE text
   late AnimationController _shimmerCtrl;
@@ -79,6 +85,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   void dispose() {
     _shimmerCtrl.dispose();
     for (final c in _enterCtrls) c.dispose();
+    _comingSoonTimer?.cancel();
     super.dispose();
   }
 
@@ -88,6 +95,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     opacity: _enterFades[index],
     child: SlideTransition(position: _enterSlides[index], child: child),
   );
+
+  // ── Coming-soon popup ─────────────────────────────────────────────────────
+
+  void _showComingSoonPopup(String providerLabel) {
+    _comingSoonTimer?.cancel();
+    setState(() {
+      _comingSoonProvider = providerLabel;
+      _showComingSoon     = true;
+    });
+    _comingSoonTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showComingSoon = false);
+    });
+  }
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -160,70 +180,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     if (mounted) context.go(AppRoutes.main);
   }
 
-  Future<void> _signInWithApple() async {
-    _setLoading('apple');
-    await Future.delayed(const Duration(milliseconds: 600));
-    // TODO: sign_in_with_apple package
-    await _completeAuth(
-      id: 'apple_demo', name: 'Demo User',
-      email: 'demo@icloud.com', provider: 'apple',
-    );
-  }
+  void _signInWithApple() => _showComingSoonPopup('Apple');
 
-  Future<void> _signInWithMicrosoft() async {
-    _setLoading('microsoft');
-    try {
-      // Ask Buddy API for the Microsoft OAuth start URL
-      final data = await BuddyApiService.instance.startOAuth('microsoft');
-      final authUrl = data['auth_url'] as String?;
-      if (!mounted) return;
-      if (authUrl != null && authUrl.isNotEmpty) {
-        final launched = await launchUrl(
-          Uri.parse(authUrl),
-          mode: LaunchMode.platformDefault,
-        );
-        if (!launched && mounted) {
-          _setError('Could not open the Microsoft sign-in page. Try again.');
-        }
-        _clearLoading();
-        return;
-      }
-    } catch (_) {
-      // API unavailable — fall through to demo path
-    }
-    await _completeAuth(
-      id: 'ms_demo', name: 'Demo User',
-      email: 'demo@outlook.com', provider: 'microsoft',
-    );
-  }
+  void _signInWithMicrosoft() => _showComingSoonPopup('Microsoft');
 
-  Future<void> _signInWithUAEPass() async {
-    _setLoading('uaepass');
-    await Future.delayed(const Duration(milliseconds: 350));
-    if (!mounted) return;
-
-    _clearLoading();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'UAE Pass integration is in progress.',
-          style: GoogleFonts.poppins(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF0C1F1C),
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 18),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: Color(0xFF1B998B), width: 1),
-        ),
-        duration: const Duration(seconds: 5),
-      ),
-    );
-  }
+  void _signInWithUAEPass() => _showComingSoonPopup('UAE Pass');
 
   void _setLoading(String p) => setState(() {
     _isLoading = true; _loadingProvider = p; _errorMessage = null;
@@ -539,7 +500,113 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   ],
                 ),
               ),
+
+              // ── Coming-soon overlay ────────────────────────────────────────
+              if (_showComingSoon) _buildComingSoonOverlay(),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildComingSoonOverlay() {
+    return Positioned.fill(
+      child: GestureDetector(
+        // Tap anywhere on the dim layer to dismiss early
+        onTap: () {
+          _comingSoonTimer?.cancel();
+          setState(() => _showComingSoon = false);
+        },
+        child: Container(
+          color: Colors.black.withOpacity(0.55),
+          child: Center(
+            child: GestureDetector(
+              // Prevent taps on the card from dismissing
+              onTap: () {},
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 28, vertical: 28),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF001A24),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFFCB9A2D),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFCB9A2D).withOpacity(0.25),
+                      blurRadius: 32,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Icon
+                    Container(
+                      width: 56, height: 56,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCB9A2D).withOpacity(0.12),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFFCB9A2D).withOpacity(0.4),
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.rocket_launch_rounded,
+                        color: Color(0xFFCB9A2D),
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Title
+                    Text(
+                      'Coming Soon',
+                      style: GoogleFonts.poppins(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Subtitle
+                    Text(
+                      '$_comingSoonProvider login\nwill be available soon.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        color: const Color(0xFF7AACB8),
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Auto-close hint
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_outlined,
+                            color: Color(0xFFCB9A2D), size: 13),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Closes automatically',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: const Color(0xFF4A7A85),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -667,14 +734,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
         ),
         const SizedBox(width: 20),
         _SSOCircle(
-          isLoading: _loadingProvider == 'apple',
-          onTap: _isLoading ? null : _signInWithApple,
+          isLoading: false,
+          onTap: _signInWithApple,
           child: const Icon(Icons.apple, color: Colors.white, size: 28),
         ),
         const SizedBox(width: 20),
         _SSOCircle(
-          isLoading: _loadingProvider == 'microsoft',
-          onTap: _isLoading ? null : _signInWithMicrosoft,
+          isLoading: false,
+          onTap: _signInWithMicrosoft,
           child: const _MicrosoftIcon(),
         ),
       ],
@@ -704,9 +771,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   // ── UAE Pass button ───────────────────────────────────────────────────────
 
   Widget _buildUAEPassButton() {
-    final isLoading = _loadingProvider == 'uaepass';
     return _PressableButton(
-      onTap: _isLoading ? null : _signInWithUAEPass,
+      onTap: _signInWithUAEPass,
       child: Container(
         width: double.infinity, height: 58,
         decoration: BoxDecoration(
@@ -724,14 +790,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
             ),
           ],
         ),
-        child: isLoading
-            ? const Center(child: SizedBox(
-                width: 22, height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5, color: Color(0xFF001A24),
-                ),
-              ))
-            : Row(
+        child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   // "AE" badge — UAE Pass logo style
