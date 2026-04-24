@@ -64,7 +64,7 @@ class _WyleAppState extends ConsumerState<WyleApp> {
   void initState() {
     super.initState();
 
-    DeepLinkService.instance.init(_handleDeepLink);  // fire-and-forget; async internally
+    DeepLinkService.instance.init(_handleDeepLink);
   }
 
   bool _isHandlingLink = false;
