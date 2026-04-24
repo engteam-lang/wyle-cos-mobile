@@ -1802,7 +1802,7 @@ class _TasksBottomSheetState extends State<_TasksBottomSheet> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
         decoration: BoxDecoration(
           color: const Color(0xFF0C1F1C),
           borderRadius: BorderRadius.circular(14),
@@ -1810,6 +1810,7 @@ class _TasksBottomSheetState extends State<_TasksBottomSheet> {
         ),
         child: Row(
           children: [
+            // ── Task info ──────────────────────────────────────────────────
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1835,10 +1836,179 @@ class _TasksBottomSheetState extends State<_TasksBottomSheet> {
                 ],
               ),
             ),
+
+            // ── Status icon ────────────────────────────────────────────────
             Icon(actionIcon, color: timeColor, size: 18),
+            const SizedBox(width: 4),
+
+            // ── Delete button ──────────────────────────────────────────────
+            GestureDetector(
+              onTap: () => _confirmDeleteTask(o),
+              child: Container(
+                width: 32, height: 32,
+                margin: const EdgeInsets.only(left: 4),
+                decoration: BoxDecoration(
+                  color: _crimson.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _crimson.withOpacity(0.25)),
+                ),
+                child: Icon(Icons.delete_outline_rounded,
+                    color: _crimson.withOpacity(0.8), size: 16),
+              ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  // ── Delete confirmation dialog ─────────────────────────────────────────────
+  void _confirmDeleteTask(ObligationModel o) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.6),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0A1E2A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: _crimson.withOpacity(0.4), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: _crimson.withOpacity(0.15),
+                blurRadius: 24,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // ── Icon ───────────────────────────────────────────────────────
+              Container(
+                width: 52, height: 52,
+                decoration: BoxDecoration(
+                  color: _crimson.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: _crimson.withOpacity(0.3)),
+                ),
+                child: Icon(Icons.delete_outline_rounded,
+                    color: _crimson, size: 26),
+              ),
+              const SizedBox(height: 16),
+
+              // ── Title ─────────────────────────────────────────────────────
+              Text(
+                'Delete Task?',
+                style: GoogleFonts.poppins(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: _white,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              // ── Task name preview ─────────────────────────────────────────
+              Text(
+                '"${o.emoji} ${o.title}"',
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 13,
+                  color: const Color(0xFF7AACB8),
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'This will permanently remove the task.\nThis action cannot be undone.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: const Color(0xFF5A7A78),
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // ── Buttons ───────────────────────────────────────────────────
+              Row(
+                children: [
+                  // Cancel
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.of(ctx).pop(),
+                      child: Container(
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1A3A4A),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _border),
+                        ),
+                        child: Center(
+                          child: Text('Cancel',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white70,
+                              )),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Delete
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        _deleteTask(o);
+                      },
+                      child: Container(
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: _crimson.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _crimson.withOpacity(0.5)),
+                        ),
+                        child: Center(
+                          child: Text('Delete',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: _crimson,
+                              )),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Perform delete ─────────────────────────────────────────────────────────
+  void _deleteTask(ObligationModel o) {
+    // 1. Remove from local state immediately (optimistic update)
+    ref.read(appStateProvider.notifier).removeObligation(o.id);
+
+    // 2. Call backend API if this is a backend-persisted task
+    if (o.id.startsWith('buddy_action_')) {
+      final backendId =
+          int.tryParse(o.id.replaceFirst('buddy_action_', ''));
+      if (backendId != null) {
+        BuddyApiService.instance
+            .deleteActionItem(backendId)
+            .catchError((_) {});
+      }
+    }
   }
 }

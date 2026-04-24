@@ -194,6 +194,13 @@ class AppStateNotifier extends StateNotifier<AppState> {
     );
   }
 
+  /// Permanently removes an obligation from local state (after DELETE API call).
+  void removeObligation(String id) {
+    state = state.copyWith(
+      obligations: state.obligations.where((o) => o.id != id).toList(),
+    );
+  }
+
   // ── Load from API ─────────────────────────────────────────────────────────────
   /// Fetches all of the user's action items from GET /v1/action-items and
   /// merges them into the obligations list.
