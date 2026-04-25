@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../../models/chat_message_model.dart';
 import '../../models/conversation_model.dart';
@@ -18,6 +20,7 @@ import '../../models/obligation_model.dart';
 import '../../navigation/app_router.dart';
 import '../../providers/app_state.dart';
 import '../../services/ai_service.dart';
+import '../../services/brain_dump_service.dart';
 import '../../services/buddy_api_service.dart';
 import '../../services/voice_service.dart';
 
@@ -95,10 +98,11 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   final TextEditingController  _textCtrl   = TextEditingController();
   final ScrollController       _scrollCtrl = ScrollController();
 
-  bool           _isRecording  = false;
-  bool           _isProcessing = false;
-  bool           _isSpeaking   = false;
-  String         _partialText  = '';
+  bool           _isRecording          = false;
+  bool           _isProcessing         = false;
+  bool           _isSpeaking           = false;
+  bool           _isBrainDumpProcessing = false; // uploading/polling after stop
+  String         _partialText          = '';
   PlatformFile?  _attachedFile;
   bool           _alertDismissed = false;
 
@@ -204,33 +208,154 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   // ── Voice ─────────────────────────────────────────────────────────────────
   Future<void> _toggleRecording() async {
     if (_isRecording) { await _stopRecording(); return; }
-    setState(() { _isRecording = true; _partialText = ''; });
-    _overlayCtrl.forward(from: 0);
-    await VoiceService.instance.startListening(
-      (text) {
-        if (!mounted) return;
-        _overlayCtrl.reverse().then((_) {
+
+    if (kIsWeb) {
+      // ── Web: speech_to_text → Message API (unchanged) ──────────────────
+      setState(() { _isRecording = true; _partialText = ''; });
+      _overlayCtrl.forward(from: 0);
+      await VoiceService.instance.startListening(
+        (text) {
           if (!mounted) return;
-          setState(() { _isRecording = false; _partialText = ''; });
-          if (text.trim().isNotEmpty) _sendMessage(text);
-        });
-      },
-      (state) {
-        if ((state == 'idle' || state == 'error') && mounted) {
           _overlayCtrl.reverse().then((_) {
-            if (mounted) setState(() { _isRecording = false; _partialText = ''; });
+            if (!mounted) return;
+            setState(() { _isRecording = false; _partialText = ''; });
+            if (text.trim().isNotEmpty) _sendMessage(text);
           });
-        }
-      },
-      onPartial: (p) { if (mounted) setState(() => _partialText = p); },
-    );
+        },
+        (state) {
+          if ((state == 'idle' || state == 'error') && mounted) {
+            _overlayCtrl.reverse().then((_) {
+              if (mounted) setState(() { _isRecording = false; _partialText = ''; });
+            });
+          }
+        },
+        onPartial: (p) { if (mounted) setState(() => _partialText = p); },
+      );
+    } else {
+      // ── Mobile: record raw audio → Brain Dump API ───────────────────────
+      try {
+        await BrainDumpService.instance.startRecording();
+        setState(() {
+          _isRecording  = true;
+          _partialText  = 'Recording voice note…';
+        });
+        _overlayCtrl.forward(from: 0);
+      } catch (_) {
+        // Permission denied or unavailable — fall back to speech_to_text
+        setState(() { _isRecording = true; _partialText = ''; });
+        _overlayCtrl.forward(from: 0);
+        await VoiceService.instance.startListening(
+          (text) {
+            if (!mounted) return;
+            _overlayCtrl.reverse().then((_) {
+              if (!mounted) return;
+              setState(() { _isRecording = false; _partialText = ''; });
+              if (text.trim().isNotEmpty) _sendMessage(text);
+            });
+          },
+          (state) {
+            if ((state == 'idle' || state == 'error') && mounted) {
+              _overlayCtrl.reverse().then((_) {
+                if (mounted) setState(() { _isRecording = false; _partialText = ''; });
+              });
+            }
+          },
+          onPartial: (p) { if (mounted) setState(() => _partialText = p); },
+        );
+      }
+    }
   }
 
   Future<void> _stopRecording() async {
-    _overlayCtrl.reverse().then((_) {
-      if (mounted) setState(() { _isRecording = false; _partialText = ''; });
+    if (kIsWeb || !BrainDumpService.instance.isRecording) {
+      // Web or fallback speech_to_text path
+      _overlayCtrl.reverse().then((_) {
+        if (mounted) setState(() { _isRecording = false; _partialText = ''; });
+      });
+      await VoiceService.instance.stopListening();
+      return;
+    }
+
+    // Mobile Brain Dump path: stop recorder → upload → poll → commit
+    setState(() {
+      _isRecording          = false;
+      _isBrainDumpProcessing = true;
+      _partialText          = 'Processing your voice note…';
     });
-    await VoiceService.instance.stopListening();
+
+    try {
+      final bytes = await BrainDumpService.instance.stopRecording();
+      if (bytes == null || bytes.isEmpty) {
+        _overlayCtrl.reverse().then((_) {
+          if (mounted) setState(() { _isBrainDumpProcessing = false; _partialText = ''; });
+        });
+        return;
+      }
+      await _processBrainDump(bytes);
+    } catch (_) {
+      _overlayCtrl.reverse().then((_) {
+        if (mounted) setState(() { _isBrainDumpProcessing = false; _partialText = ''; });
+      });
+    }
+  }
+
+  /// Upload bytes → poll → commit → show result in chat.
+  Future<void> _processBrainDump(List<int> bytes) async {
+    try {
+      setState(() => _partialText = 'Uploading & transcribing…');
+      final result = await BrainDumpService.instance
+          .processAudio(Uint8List.fromList(bytes));
+
+      // Hide overlay
+      await _overlayCtrl.reverse();
+      if (!mounted) return;
+      setState(() { _isBrainDumpProcessing = false; _partialText = ''; });
+
+      final transcript = result.transcript.trim();
+      if (transcript.isEmpty) return;
+
+      // Show user's voice message
+      setState(() {
+        _messages.add(ChatMessageModel.user('🎙️ $transcript'));
+        _isProcessing = true;
+      });
+      _scrollToBottom();
+
+      // Build assistant reply
+      final itemsLine = result.savedItemCount > 0
+          ? 'I\'ve saved **${result.savedItemCount}** action item'
+            '${result.savedItemCount == 1 ? '' : 's'} to your inbox.'
+          : 'No new action items were found in your voice note.';
+      final assistantMsg =
+          'Got it! Here\'s what I heard:\n\n*"$transcript"*\n\n$itemsLine';
+
+      setState(() {
+        _messages.add(ChatMessageModel.assistant(assistantMsg));
+        _isProcessing = false;
+      });
+      _saveHistory();
+      _scrollToBottom();
+
+      // Refresh inbox so new items appear immediately
+      if (result.savedItemCount > 0) {
+        ref.read(appStateProvider.notifier).loadObligationsFromApi();
+      }
+
+      // Read response aloud
+      setState(() => _isSpeaking = true);
+      await VoiceService.instance.speak(assistantMsg);
+      if (mounted) setState(() => _isSpeaking = false);
+    } catch (e) {
+      await _overlayCtrl.reverse();
+      if (!mounted) return;
+      setState(() {
+        _isBrainDumpProcessing = false;
+        _partialText = '';
+        _isProcessing = false;
+        _messages.add(ChatMessageModel.assistant(
+            'Sorry, I couldn\'t process your voice note. Please try again.'));
+      });
+    }
   }
 
   // ── Send ──────────────────────────────────────────────────────────────────
@@ -614,13 +739,14 @@ Currency: AED. Context: Dubai, UAE.''';
                   _buildInputBar(),
                 ],
               ),
-              // Voice overlay
-              if (_isRecording)
+              // Voice overlay — shown during recording AND brain-dump processing
+              if (_isRecording || _isBrainDumpProcessing)
                 FadeTransition(
                   opacity: _overlayAnim,
                   child: _VoiceRecordingOverlay(
-                    partialText: _partialText,
-                    onStop: _stopRecording,
+                    partialText:  _partialText,
+                    onStop:       _isRecording ? _stopRecording : null,
+                    isProcessing: _isBrainDumpProcessing,
                   ),
                 ),
             ],
@@ -1300,10 +1426,14 @@ class _FallbackAvatar extends StatelessWidget {
 // Voice Recording Overlay
 // ─────────────────────────────────────────────────────────────────────────────
 class _VoiceRecordingOverlay extends StatefulWidget {
-  final String       partialText;
-  final VoidCallback onStop;
-  const _VoiceRecordingOverlay(
-      {required this.partialText, required this.onStop});
+  final String        partialText;
+  final VoidCallback? onStop;        // null while brain-dump is processing
+  final bool          isProcessing;  // true = uploading/polling, hide stop btn
+  const _VoiceRecordingOverlay({
+    required this.partialText,
+    required this.onStop,
+    this.isProcessing = false,
+  });
   @override
   State<_VoiceRecordingOverlay> createState() =>
       _VoiceRecordingOverlayState();
@@ -1491,42 +1621,59 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
                 ],
               ),
               const SizedBox(height: 8),
-              Text('Auto-stops after 3 s of silence',
-                  style: GoogleFonts.inter(
-                      color: Colors.white24, fontSize: 11,
-                      letterSpacing: 0.3)),
+              if (!widget.isProcessing)
+                Text('Auto-stops after 3 s of silence',
+                    style: GoogleFonts.inter(
+                        color: Colors.white24, fontSize: 11,
+                        letterSpacing: 0.3)),
               const Spacer(),
-              GestureDetector(
-                onTap: widget.onStop,
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 48),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 36, vertical: 15),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(40),
-                    border: Border.all(color: Colors.white24, width: 1),
-                    color: Colors.white.withOpacity(0.05),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 10, height: 10,
-                        decoration: BoxDecoration(
-                          color: _crimson,
-                          borderRadius: BorderRadius.circular(2),
+              // ── Bottom action ──────────────────────────────────────────────
+              if (widget.isProcessing) ...[
+                // Processing state: spinner + status text
+                const CircularProgressIndicator(
+                  color: _verdigris, strokeWidth: 2.5),
+                const SizedBox(height: 16),
+                Text(widget.partialText,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                        color: Colors.white70, fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.5)),
+                const SizedBox(height: 48),
+              ] else ...[
+                // Recording state: stop button
+                GestureDetector(
+                  onTap: widget.onStop,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 48),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 36, vertical: 15),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(40),
+                      border: Border.all(color: Colors.white24, width: 1),
+                      color: Colors.white.withOpacity(0.05),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 10, height: 10,
+                          decoration: BoxDecoration(
+                            color: _crimson,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text('Stop recording',
-                          style: GoogleFonts.inter(
-                              color: Colors.white70, fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0.3)),
-                    ],
+                        const SizedBox(width: 10),
+                        Text('Stop recording',
+                            style: GoogleFonts.inter(
+                                color: Colors.white70, fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.3)),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

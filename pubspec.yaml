@@ -34,6 +34,7 @@ dependencies:
   # Voice / Audio
   speech_to_text: ^7.3.0
   flutter_tts: ^4.0.2
+  record: ^5.0.4
 
   # UI / Fonts
   google_fonts: ^6.2.1
