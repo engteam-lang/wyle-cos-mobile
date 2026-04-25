@@ -338,7 +338,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         _partialText = '';
         _isProcessing = false;
         _messages.add(ChatMessageModel.assistant(
-            'Sorry, I couldn\'t process your voice note. Please try again.'));
+            'Sorry, I couldn\'t process your voice note. Error: $e\n\nPlease try again.'));
       });
     }
   }
