@@ -82,13 +82,12 @@ jobs:
           for NAME in ic_launcher ic_launcher_round; do
             FILE="$DIR/${NAME}.xml"
             if [ -f "$FILE" ]; then
-              cat > "$FILE" << 'ENDXML'
-<?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/ic_launcher_background"/>
-    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
-</adaptive-icon>
-ENDXML
+              printf '%s\n' \
+                '<?xml version="1.0" encoding="utf-8"?>' \
+                '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">' \
+                '    <background android:drawable="@color/ic_launcher_background"/>' \
+                '    <foreground android:drawable="@drawable/ic_launcher_foreground"/>' \
+                '</adaptive-icon>' > "$FILE"
               echo "Patched $FILE"
             fi
           done
