@@ -50,8 +50,8 @@ class BrainDumpService {
     if (!ok) throw Exception('Microphone permission denied');
 
     if (kIsWeb) {
-      // Web: the path argument is ignored by the browser MediaRecorder;
-      // the recording goes to an internal blob automatically.
+      // Web: record 6.x requires an empty-string path on web;
+      // the browser MediaRecorder stores audio in an internal blob.
       await _recorder!.start(
         const RecordConfig(
           encoder:     AudioEncoder.opus,   // → audio/webm;codecs=opus in Chrome
@@ -59,7 +59,7 @@ class BrainDumpService {
           numChannels: 1,
           bitRate:     64000,
         ),
-        path: 'recording.webm',
+        path: '',
       );
     } else {
       // Mobile: record to a temp .m4a file (AAC-LC)
