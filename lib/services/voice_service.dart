@@ -118,12 +118,13 @@ class VoiceService {
 
   /// Start speech recognition.
   /// [onPartial] receives live partial words as the user speaks.
-  /// Auto-stops after [silenceTimeout] of silence (default 3 s).
+  /// Auto-stops after [silenceTimeout] of silence (default 8 s — long enough
+  /// for natural pauses during brain-dump style speech).
   Future<void> startListening(
     TranscriptCallback onResult,
     StateCallback onState, {
     PartialCallback? onPartial,
-    Duration silenceTimeout = const Duration(seconds: 3),
+    Duration silenceTimeout = const Duration(seconds: 8),
   }) async {
     if (!_speechAvailable) {
       final ok = await _speech.initialize();
@@ -151,7 +152,8 @@ class VoiceService {
       listenMode:     ListenMode.dictation,
       cancelOnError:  true,
       partialResults: true,
-      pauseFor:       silenceTimeout, // auto-stop after N seconds of silence
+      pauseFor:       silenceTimeout,         // auto-stop after N s of silence
+      listenFor:      const Duration(minutes: 3), // max session length
     );
   }
 

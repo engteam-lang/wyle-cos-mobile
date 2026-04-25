@@ -14,6 +14,7 @@ class ObligationModel {
   final String? replyTo;
   final String? replySubject;
   final String? meetingLink;
+  final String? startsAt; // ISO-8601 string from API (e.g. "2026-04-26T19:00:00Z")
 
   const ObligationModel({
     required this.id,
@@ -30,6 +31,7 @@ class ObligationModel {
     this.replyTo,
     this.replySubject,
     this.meetingLink,
+    this.startsAt,
   });
 
   ObligationModel copyWith({
@@ -57,6 +59,7 @@ class ObligationModel {
       executionPath: executionPath ?? this.executionPath,
       notes:         notes         ?? this.notes,
       source:        source        ?? this.source,
+      startsAt:      startsAt      ?? this.startsAt,
     );
   }
 
@@ -76,6 +79,7 @@ class ObligationModel {
       replyTo:       json['replyTo'],
       replySubject:  json['replySubject'],
       meetingLink:   json['meetingLink'],
+      startsAt:      json['starts_at'] as String?,
     );
   }
 
@@ -91,6 +95,7 @@ class ObligationModel {
     'executionPath': executionPath,
     'notes':         notes,
     'source':        source,
+    'starts_at':     startsAt,
   };
 }
 

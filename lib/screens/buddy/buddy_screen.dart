@@ -597,6 +597,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         executionPath: 'Scheduled by Buddy',
         notes:         noteText,
         source:        'buddy',
+        startsAt:      action.startsAt,
       ));
     }
 
@@ -2270,6 +2271,43 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
     );
   }
 
+  /// Formats the time label for a task card.
+  /// Prefers [startsAt] (ISO-8601) for a human-readable date+time string,
+  /// falling back to daysUntil-based labels for legacy / API items.
+  String _formatTaskTime(ObligationModel o) {
+    if (o.startsAt != null) {
+      try {
+        final dt      = DateTime.parse(o.startsAt!).toLocal();
+        final now     = DateTime.now();
+        final today   = DateTime(now.year, now.month, now.day);
+        final itemDay = DateTime(dt.year, dt.month, dt.day);
+        final diff    = itemDay.difference(today).inDays;
+
+        // Build time portion only when the time isn't midnight exactly
+        final hasTime  = dt.hour != 0 || dt.minute != 0;
+        final h        = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+        final min      = dt.minute.toString().padLeft(2, '0');
+        final ampm     = dt.hour < 12 ? 'AM' : 'PM';
+        final timePart = hasTime ? ', $h:$min $ampm' : '';
+
+        if (diff < 0)  return 'Overdue';
+        if (diff == 0) return 'Today$timePart';
+        if (diff == 1) return 'Tomorrow$timePart';
+
+        const months = [
+          'Jan','Feb','Mar','Apr','May','Jun',
+          'Jul','Aug','Sep','Oct','Nov','Dec',
+        ];
+        final year = dt.year != now.year ? ' ${dt.year}' : '';
+        return '${dt.day} ${months[dt.month - 1]}$year$timePart';
+      } catch (_) {}
+    }
+    // Fallback to daysUntil
+    if (o.daysUntil == 0) return 'Due today';
+    if (o.daysUntil < 0)  return 'Overdue';
+    return '${o.daysUntil}d';
+  }
+
   Widget _taskCard(ObligationModel o, {required bool isUrgent}) {
     final borderColor = isUrgent
         ? const Color(0xFFFF5252).withOpacity(0.5)
@@ -2279,11 +2317,7 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
     final actionIcon = o.executionPath == 'auto'
         ? Icons.bolt_rounded
         : Icons.access_time_rounded;
-    final timeText = o.daysUntil == 0
-        ? 'Due today'
-        : o.daysUntil < 0
-            ? 'Overdue'
-            : '${o.daysUntil}d';
+    final timeText = _formatTaskTime(o);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
