@@ -542,13 +542,20 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
           ? 'buddy_action_$persistedId'
           : 'buddy_${DateTime.now().millisecondsSinceEpoch}_$i';
 
+      // Use starts_at when present, otherwise fall back to remind_at.
+      // The Message API often returns remind_at with a non-null date while
+      // starts_at is null for "task" kind items.
+      final dateIso = action.startsAt ?? action.remindAt;
+
       // Calculate daysUntil and build a human-readable "starts at" note
       int daysUntil = 1;
       String? noteText;
-      if (action.startsAt != null) {
+      if (dateIso != null) {
         try {
-          final start = DateTime.parse(action.startsAt!).toLocal();
-          daysUntil = start.difference(DateTime.now()).inDays;
+          final start = DateTime.parse(dateIso).toLocal();
+          final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+          final itemDay = DateTime(start.year, start.month, start.day);
+          daysUntil = itemDay.difference(today).inDays;
           final h    = start.hour % 12 == 0 ? 12 : start.hour % 12;
           final min  = start.minute.toString().padLeft(2, '0');
           final ampm = start.hour < 12 ? 'AM' : 'PM';
@@ -582,7 +589,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         executionPath: 'Scheduled by Buddy',
         notes:         noteText,
         source:        'buddy',
-        startsAt:      action.startsAt,
+        startsAt:      dateIso, // store whichever date field was available
       ));
     }
 
