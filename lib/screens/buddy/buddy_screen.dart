@@ -2269,7 +2269,10 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
   String _formatTaskTime(ObligationModel o) {
     if (o.startsAt != null) {
       try {
-        final dt      = DateTime.parse(o.startsAt!).toLocal();
+        // The API currently returns local times in UTC format (e.g. 17:00Z for 5 PM).
+        // We extract the nominal hour/minute and force it to be local.
+        final parsed  = DateTime.parse(o.startsAt!);
+        final dt      = DateTime(parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute);
         final now     = DateTime.now();
         final today   = DateTime(now.year, now.month, now.day);
         final itemDay = DateTime(dt.year, dt.month, dt.day);
