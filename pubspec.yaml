@@ -69,9 +69,12 @@ flutter_launcher_icons:
   # Base image for legacy Android (< API 26) — full square icon
   image_path: "assets/logos/wyle_logo_teal.png"
   # Adaptive icon for Android 8+ (API 26+)
-  # Foreground: logo centred with safe-zone padding
+  # Foreground: vector XML — flutter_launcher_icons copies XML files
+  # directly, so the <group scaleX/Y="0.72"> in the file keeps the
+  # teal-circle W icon at ≈72 % of the 108 dp canvas, well inside the
+  # 18 dp safe-zone on every side.  No clipping on any launcher mask.
   # Background: app's dark background colour
-  adaptive_icon_foreground: "assets/logos/wyle_logo_teal.png"
+  adaptive_icon_foreground: "android/app/src/main/res/drawable/ic_launcher_foreground.xml"
   adaptive_icon_background: "#000D12"
   min_sdk_android: 21
   web:
