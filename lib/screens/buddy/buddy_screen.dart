@@ -206,11 +206,28 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   }
 
   // ── Voice ─────────────────────────────────────────────────────────────────
+  //
+  // ALL platforms use the Brain Dump API when the mic button is tapped:
+  //   Web    → AudioRecorder.startStream() → webm/opus chunks assembled
+  //   Mobile → AudioRecorder.start()       → .m4a file
+  //
+  // Keyboard / text input continues to use the Message API (_sendMessage).
+  //
+  // Fallback to speech_to_text → Message API only if mic permission is
+  // denied (e.g. user blocks the browser prompt).
   Future<void> _toggleRecording() async {
     if (_isRecording) { await _stopRecording(); return; }
 
-    if (kIsWeb) {
-      // ── Web: speech_to_text → Message API (unchanged) ──────────────────
+    try {
+      // Works on web (webm/opus stream) and mobile (aac-lc file)
+      await BrainDumpService.instance.startRecording();
+      setState(() {
+        _isRecording = true;
+        _partialText = 'Recording voice note…';
+      });
+      _overlayCtrl.forward(from: 0);
+    } catch (_) {
+      // Mic permission denied — fall back to speech_to_text → Message API
       setState(() { _isRecording = true; _partialText = ''; });
       _overlayCtrl.forward(from: 0);
       await VoiceService.instance.startListening(
@@ -231,44 +248,12 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         },
         onPartial: (p) { if (mounted) setState(() => _partialText = p); },
       );
-    } else {
-      // ── Mobile: record raw audio → Brain Dump API ───────────────────────
-      try {
-        await BrainDumpService.instance.startRecording();
-        setState(() {
-          _isRecording  = true;
-          _partialText  = 'Recording voice note…';
-        });
-        _overlayCtrl.forward(from: 0);
-      } catch (_) {
-        // Permission denied or unavailable — fall back to speech_to_text
-        setState(() { _isRecording = true; _partialText = ''; });
-        _overlayCtrl.forward(from: 0);
-        await VoiceService.instance.startListening(
-          (text) {
-            if (!mounted) return;
-            _overlayCtrl.reverse().then((_) {
-              if (!mounted) return;
-              setState(() { _isRecording = false; _partialText = ''; });
-              if (text.trim().isNotEmpty) _sendMessage(text);
-            });
-          },
-          (state) {
-            if ((state == 'idle' || state == 'error') && mounted) {
-              _overlayCtrl.reverse().then((_) {
-                if (mounted) setState(() { _isRecording = false; _partialText = ''; });
-              });
-            }
-          },
-          onPartial: (p) { if (mounted) setState(() => _partialText = p); },
-        );
-      }
     }
   }
 
   Future<void> _stopRecording() async {
-    if (kIsWeb || !BrainDumpService.instance.isRecording) {
-      // Web or fallback speech_to_text path
+    if (!BrainDumpService.instance.isRecording) {
+      // speech_to_text fallback path
       _overlayCtrl.reverse().then((_) {
         if (mounted) setState(() { _isRecording = false; _partialText = ''; });
       });
@@ -276,7 +261,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       return;
     }
 
-    // Mobile Brain Dump path: stop recorder → upload → poll → commit
+    // Brain Dump path (web + mobile): stop recorder → upload → poll → commit
     setState(() {
       _isRecording          = false;
       _isBrainDumpProcessing = true;
