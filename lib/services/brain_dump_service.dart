@@ -1,7 +1,7 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'buddy_api_service.dart';
@@ -21,21 +21,23 @@ class BrainDumpResult {
 ///
 ///   startRecording() → stopRecording() → processAudio()
 ///
-/// Web:    Uses AudioRecorder.startStream() so chunks arrive as a
-///         Stream<Uint8List>; the browser's MediaRecorder produces
-///         audio/webm (Opus codec) which the API accepts natively.
+/// Web:    AudioRecorder.start() records to an in-memory browser blob.
+///         stop() returns a blob URL; we fetch the raw bytes with http.get()
+///         (XHR can access same-origin blob URLs).
+///         Produces audio/webm (Opus), which the Brain Dump API accepts.
 ///
-/// Mobile: Records to a temp .m4a file (AAC-LC), then reads bytes on stop.
+/// Mobile: AudioRecorder.start() records to a temp .m4a file (AAC-LC).
+///         stop() returns the file path; we read bytes directly.
+///
+/// NOTE:   startStream() is intentionally NOT used.  record_linux v0.7.x
+///         does not implement startStream, causing compile errors on the
+///         Linux CI runner when building the Android APK.
 class BrainDumpService {
   BrainDumpService._();
   static final BrainDumpService instance = BrainDumpService._();
 
   AudioRecorder? _recorder;
   bool _isRecording = false;
-
-  // Web stream recording state
-  StreamSubscription<Uint8List>? _streamSub;
-  final List<Uint8List> _webChunks = [];
 
   bool get isRecording => _isRecording;
 
@@ -48,24 +50,19 @@ class BrainDumpService {
     if (!ok) throw Exception('Microphone permission denied');
 
     if (kIsWeb) {
-      // Web: stream raw bytes from the browser MediaRecorder
-      // AudioEncoder.opus → audio/webm;codecs=opus (Chrome) — matches
-      // the .webm format the Brain Dump API accepts.
-      _webChunks.clear();
-      final stream = await _recorder!.startStream(
+      // Web: the path argument is ignored by the browser MediaRecorder;
+      // the recording goes to an internal blob automatically.
+      await _recorder!.start(
         const RecordConfig(
-          encoder:     AudioEncoder.opus,
+          encoder:     AudioEncoder.opus,   // → audio/webm;codecs=opus in Chrome
           sampleRate:  16000,
           numChannels: 1,
           bitRate:     64000,
         ),
-      );
-      _streamSub = stream.listen(
-        (chunk) => _webChunks.add(chunk),
-        cancelOnError: true,
+        path: 'recording.webm',
       );
     } else {
-      // Mobile: record to a temp .m4a file
+      // Mobile: record to a temp .m4a file (AAC-LC)
       final dir  = await getTemporaryDirectory();
       final path = '${dir.path}/bd_${DateTime.now().millisecondsSinceEpoch}.m4a';
       await _recorder!.start(
@@ -85,32 +82,24 @@ class BrainDumpService {
   Future<Uint8List?> stopRecording() async {
     if (!_isRecording || _recorder == null) return null;
 
+    final result = await _recorder!.stop();
+    _isRecording = false;
+    if (result == null) return null;
+
     if (kIsWeb) {
-      // Stopping the recorder flushes any remaining chunks to the stream
-      // before it closes, so we await stop() first, then cancel the sub.
-      await _recorder!.stop();
-      await _streamSub?.cancel();
-      _streamSub = null;
-      _isRecording = false;
-
-      if (_webChunks.isEmpty) return null;
-
-      // Assemble the individual MediaRecorder chunks into one Uint8List.
-      // Together they form a valid WebM container the API can decode.
-      final totalLen = _webChunks.fold(0, (sum, c) => sum + c.length);
-      final result   = Uint8List(totalLen);
-      int offset = 0;
-      for (final chunk in _webChunks) {
-        result.setRange(offset, offset + chunk.length, chunk);
-        offset += chunk.length;
+      // On web stop() returns a blob URL ("blob:https://…").
+      // http.get() uses XHR under the hood, which can fetch same-origin
+      // blob URLs — no dart:html required.
+      try {
+        final response = await http.get(Uri.parse(result));
+        if (response.statusCode != 200) return null;
+        return response.bodyBytes;
+      } catch (_) {
+        return null;
       }
-      _webChunks.clear();
-      return result;
     } else {
-      final path = await _recorder!.stop();
-      _isRecording = false;
-      if (path == null) return null;
-      final file = File(path);
+      // Mobile: result is a file-system path
+      final file = File(result);
       if (!await file.exists()) return null;
       final bytes = await file.readAsBytes();
       try { await file.delete(); } catch (_) {}
@@ -121,9 +110,6 @@ class BrainDumpService {
   /// Cancel without saving.
   Future<void> cancelRecording() async {
     if (_isRecording && _recorder != null) {
-      await _streamSub?.cancel();
-      _streamSub = null;
-      _webChunks.clear();
       await _recorder!.cancel();
       _isRecording = false;
     }
@@ -135,7 +121,7 @@ class BrainDumpService {
   /// Returns transcript text and number of action items saved.
   Future<BrainDumpResult> processAudio(Uint8List audioBytes) async {
     // Platform-specific format:
-    //   Web    → audio/webm  (MediaRecorder / Opus codec)
+    //   Web    → audio/webm  (Opus / MediaRecorder)
     //   Mobile → audio/mp4   (AAC-LC in .m4a container)
     final filename = kIsWeb ? 'recording.webm' : 'recording.m4a';
     final mimeType = kIsWeb ? 'audio/webm'     : 'audio/mp4';
