@@ -1,6 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:just_audio/just_audio.dart';
 
 typedef TranscriptCallback = void Function(String text);
 typedef StateCallback      = void Function(String state);
@@ -13,6 +19,8 @@ class VoiceService {
 
   final SpeechToText _speech  = SpeechToText();
   final FlutterTts   _tts     = FlutterTts();
+  final AudioPlayer  _audioPlayer = AudioPlayer();
+  
   bool _speechAvailable       = false;
   bool _isListening           = false;
 
@@ -26,25 +34,40 @@ class VoiceService {
       onError:  (error) {},
     );
 
+    // Initialize fallback native TTS
     await _tts.setLanguage('en-US');
     await _configureNaturalVoice();
-    // Softer, warmer delivery: less "assistant-like", more human.
     await _tts.setPitch(1.08);
     await _tts.setSpeechRate(0.46);
 
-    // Complete the completer when TTS finishes naturally
+    // Complete the completer when native TTS finishes naturally
     _tts.setCompletionHandler(() {
-      _speakCompleter?.complete();
+      if (_speakCompleter != null && !_speakCompleter!.isCompleted) {
+        _speakCompleter?.complete();
+      }
       _speakCompleter = null;
     });
-    // Also complete on cancel or error so we never get stuck
     _tts.setCancelHandler(() {
-      _speakCompleter?.complete();
+      if (_speakCompleter != null && !_speakCompleter!.isCompleted) {
+        _speakCompleter?.complete();
+      }
       _speakCompleter = null;
     });
     _tts.setErrorHandler((_) {
-      _speakCompleter?.complete();
+      if (_speakCompleter != null && !_speakCompleter!.isCompleted) {
+        _speakCompleter?.complete();
+      }
       _speakCompleter = null;
+    });
+
+    // Complete the completer when cloud TTS finishes playing
+    _audioPlayer.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        if (_speakCompleter != null && !_speakCompleter!.isCompleted) {
+          _speakCompleter?.complete();
+        }
+        _speakCompleter = null;
+      }
     });
   }
 
@@ -163,29 +186,72 @@ class VoiceService {
     _isListening = false;
   }
 
-  /// Speak text aloud.
+  /// Speak text aloud using OpenAI TTS, with flutter_tts fallback.
   /// Returns only when speech has fully completed (or been stopped).
-  /// This keeps _isSpeaking = true for the full duration of playback.
+  /// This keeps _speakCompleter active for the full duration of playback.
   Future<void> speak(String text) async {
     // Cancel any in-progress speech first
-    _speakCompleter?.complete();
+    if (_speakCompleter != null && !_speakCompleter!.isCompleted) {
+      _speakCompleter?.complete();
+    }
     _speakCompleter = null;
 
     await _tts.stop();
+    await _audioPlayer.stop();
 
     _speakCompleter = Completer<void>();
-    await _tts.speak(text);
+
+    try {
+      final apiKey = dotenv.env['EXPO_PUBLIC_OPENAI_API_KEY'];
+      if (apiKey == null || apiKey.isEmpty) {
+        throw Exception("No OpenAI API key found. Falling back to native TTS.");
+      }
+
+      final url = Uri.parse('https://api.openai.com/v1/audio/speech');
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $apiKey',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'model': 'tts-1',
+          'input': text,
+          'voice': 'nova', // Human female voice
+          'response_format': 'mp3',
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final dir = await getTemporaryDirectory();
+        final file = File('${dir.path}/tts_response.mp3');
+        await file.writeAsBytes(response.bodyBytes);
+        await _audioPlayer.setFilePath(file.path);
+        await _audioPlayer.play();
+      } else {
+        throw Exception("OpenAI TTS failed with status ${response.statusCode}: ${response.body}");
+      }
+    } catch (e) {
+      print("TTS Error: $e");
+      // Fallback to native TTS if cloud TTS fails
+      await _tts.speak(text);
+    }
 
     // Wait here until the completion/cancel/error handler fires
-    await _speakCompleter!.future;
+    if (_speakCompleter != null) {
+      await _speakCompleter!.future;
+    }
   }
 
   Future<void> stopSpeaking() async {
     await _tts.stop();
+    await _audioPlayer.stop();
     // Manually complete in case the handler doesn't fire on this platform
-    _speakCompleter?.complete();
+    if (_speakCompleter != null && !_speakCompleter!.isCompleted) {
+      _speakCompleter?.complete();
+    }
     _speakCompleter = null;
   }
 
-  bool get isSpeaking => false;
+  bool get isSpeaking => _speakCompleter != null && !_speakCompleter!.isCompleted;
 }

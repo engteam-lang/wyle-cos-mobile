@@ -1,17 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Adaptive-icon foreground wrapper.
+  Adaptive-icon foreground — self-contained vector, no mipmap references.
 
-  flutter_launcher_icons generates @mipmap/ic_launcher_foreground (a PNG
-  that fills the full 108 dp adaptive-icon canvas).  Android's launcher
-  mask clips roughly 18 dp on every side, so the outer edges of the logo
-  are cut off on circular / squircle masks.
+  Scaled to 72 % around the centre (54, 54) so the teal circle
+  (effective radius ≈26 dp) sits well inside the 18 dp safe-zone
+  guaranteed by the adaptive-icon spec on all launcher mask shapes.
 
-  This <inset> adds 15 % padding on all four sides, pulling the logo
-  well inside the guaranteed visible safe-zone.  Referenced from
-  mipmap-anydpi-v26/ic_launcher.xml (patched in CI after flutter_launcher_icons
-  runs so that the mipmap PNG already exists).
+  The background colour (#000D12) is supplied separately by the
+  <background> layer in mipmap-anydpi-v26/ic_launcher.xml.
 -->
-<inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:drawable="@mipmap/ic_launcher_foreground"
-    android:inset="15%" />
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.72"
+        android:scaleY="0.72">
+
+        <!-- Teal circle — original radius 36, effective radius ≈26 after scale -->
+        <path
+            android:fillColor="#1B998B"
+            android:pathData="M54,18 a36,36 0 1,1 0,72 a36,36 0 1,1 0,-72z"/>
+
+        <!-- "W" letterform in white -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M36,38 L42,38 L54,62 L66,38 L72,38 L57,74 L54,68 L51,74 Z"/>
+
+    </group>
+
+</vector>
