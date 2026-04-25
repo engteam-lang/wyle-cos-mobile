@@ -69,6 +69,30 @@ jobs:
       - name: Generate app launcher icons
         run: dart run flutter_launcher_icons
 
+      # ── Patch adaptive icon to add safe-zone inset ────────────────────────────
+      # flutter_launcher_icons fills the 108 dp foreground canvas edge-to-edge,
+      # which causes the logo to be clipped on circular / squircle launcher
+      # masks.  We overwrite the anydpi-v26 adaptive-icon XMLs to reference
+      # drawable/ic_launcher_foreground.xml, an <inset 15%> wrapper that pulls
+      # the logo 15 % in on every side — well inside the guaranteed safe-zone.
+      - name: Patch adaptive icon with safe-zone inset
+        run: |
+          DIR=android/app/src/main/res/mipmap-anydpi-v26
+          mkdir -p "$DIR"
+          for NAME in ic_launcher ic_launcher_round; do
+            FILE="$DIR/${NAME}.xml"
+            if [ -f "$FILE" ]; then
+              cat > "$FILE" << 'ENDXML'
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background"/>
+    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+</adaptive-icon>
+ENDXML
+              echo "Patched $FILE"
+            fi
+          done
+
       # ── Build ─────────────────────────────────────────────────────────────────
       # IMPORTANT: do NOT run `flutter clean` before this step.
       # `flutter clean` deletes .dart_tool/ (Flutter's incremental build-state
