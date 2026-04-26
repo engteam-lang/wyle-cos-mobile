@@ -11,7 +11,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
 
 import '../../models/chat_message_model.dart';
 import '../../models/conversation_model.dart';
@@ -593,7 +595,8 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       String? noteText;
       if (dateIso != null) {
         try {
-          final start = DateTime.parse(dateIso).toLocal();
+          final parsed = DateTime.parse(dateIso);
+          final start = DateTime(parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute);
           final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
           final itemDay = DateTime(start.year, start.month, start.day);
           daysUntil = itemDay.difference(today).inDays;
@@ -875,7 +878,78 @@ Currency: AED. Context: Dubai, UAE.''';
     });
   }
 
-  Future<void> _pickAttachment() async {
+  // ── Attachment sheet ──────────────────────────────────────────────────────
+
+  /// True when the device has a usable camera (Android / iOS only).
+  bool get _hasCamera => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+  /// Shows the "Add Attachment" bottom sheet with Camera / Photos / Files rows.
+  void _showAttachmentSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _AttachmentSheet(
+        hasCamera: _hasCamera,
+        onCamera: () async {
+          Navigator.of(context).pop();
+          await _pickFromCamera();
+        },
+        onPhotos: () async {
+          Navigator.of(context).pop();
+          await _pickFromGallery();
+        },
+        onFiles: () async {
+          Navigator.of(context).pop();
+          await _pickFromFiles();
+        },
+      ),
+    );
+  }
+
+  Future<void> _pickFromCamera() async {
+    try {
+      final xf = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: 90,
+      );
+      if (xf == null || !mounted) return;
+      final bytes = await xf.readAsBytes();
+      final name  = xf.name.isNotEmpty ? xf.name
+          : 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      setState(() {
+        _attachedFile = PlatformFile(
+          name:  name,
+          size:  bytes.length,
+          bytes: bytes,
+          path:  kIsWeb ? null : xf.path,
+        );
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final xf = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 90,
+      );
+      if (xf == null || !mounted) return;
+      final bytes = await xf.readAsBytes();
+      final name  = xf.name.isNotEmpty ? xf.name
+          : 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      setState(() {
+        _attachedFile = PlatformFile(
+          name:  name,
+          size:  bytes.length,
+          bytes: bytes,
+          path:  kIsWeb ? null : xf.path,
+        );
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _pickFromFiles() async {
     try {
       final result = await FilePicker.platform.pickFiles(
           type: FileType.any, allowMultiple: false, withData: true);
@@ -1049,7 +1123,7 @@ Currency: AED. Context: Dubai, UAE.''';
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '${ob.emoji} ${ob.title} — due TODAY!',
+                  '${ob.emoji} ${ob.title} — ${ob.daysUntil < 0 ? 'OVERDUE!' : ob.daysUntil == 0 ? 'due TODAY!' : 'due TOMORROW!'}',
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -1603,7 +1677,7 @@ Currency: AED. Context: Dubai, UAE.''';
           children: [
             // Attach button
             GestureDetector(
-              onTap: _pickAttachment,
+              onTap: _showAttachmentSheet,
               child: Padding(
                 padding: const EdgeInsets.only(left: 14),
                 child: Icon(
@@ -2026,6 +2100,165 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attachment bottom sheet
+// ─────────────────────────────────────────────────────────────────────────────
+class _AttachmentSheet extends StatelessWidget {
+  final bool hasCamera;
+  final VoidCallback onCamera;
+  final VoidCallback onPhotos;
+  final VoidCallback onFiles;
+
+  const _AttachmentSheet({
+    required this.hasCamera,
+    required this.onCamera,
+    required this.onPhotos,
+    required this.onFiles,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF0A0A0A),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white12,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Title
+          Text(
+            'Add Attachment',
+            style: GoogleFonts.poppins(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Buddy will scan and extract key details',
+            style: GoogleFonts.inter(
+              color: const Color(0xFF1B998B),
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 20),
+          // Camera row — mobile only
+          if (hasCamera) ...[
+            _AttachmentRow(
+              icon: Icons.camera_alt_outlined,
+              title: 'Camera',
+              subtitle: 'Scan a document or ID card live',
+              onTap: onCamera,
+            ),
+            _AttachmentDivider(),
+          ],
+          // Photos
+          _AttachmentRow(
+            icon: Icons.photo_outlined,
+            title: 'Photos',
+            subtitle: 'Pick an image from your gallery',
+            onTap: onPhotos,
+          ),
+          _AttachmentDivider(),
+          // Files
+          _AttachmentRow(
+            icon: Icons.folder_outlined,
+            title: 'Files',
+            subtitle: 'Upload a PDF, Word doc, or image',
+            onTap: onFiles,
+            iconColor: const Color(0xFFCB9A2D),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AttachmentRow extends StatelessWidget {
+  final IconData    icon;
+  final String      title;
+  final String      subtitle;
+  final VoidCallback onTap;
+  final Color?      iconColor;
+
+  const _AttachmentRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final col = iconColor ?? Colors.white70;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: col, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: GoogleFonts.inter(
+                          color: Colors.white38, fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+                color: Colors.white24, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AttachmentDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => const Divider(
+        color: Color(0xFF1C1C1C),
+        height: 1,
+        thickness: 1,
+      );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _BlinkingDot extends StatefulWidget {
   @override
