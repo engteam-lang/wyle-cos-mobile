@@ -83,6 +83,11 @@ class ChatApiResponse {
   /// Backend must populate this field; it is empty by default so older
   /// backend versions are fully backward-compatible.
   final List<int>      completedActionItemIds;
+  /// Non-empty when the backend detected a scheduling conflict and wants the
+  /// user to pick one of the [suggestedActions] alternatives (A, B, C…).
+  /// Each element is a raw JSON object from the backend; the UI only needs to
+  /// know that this list is non-empty to trigger the interactive picker.
+  final List<dynamic>  scheduleConflictAlternatives;
 
   const ChatApiResponse({
     required this.conversationId,
@@ -91,7 +96,8 @@ class ChatApiResponse {
     required this.assistantContent,
     required this.suggestedActions,
     required this.persistedActionItemIds,
-    this.completedActionItemIds = const [],
+    this.completedActionItemIds          = const [],
+    this.scheduleConflictAlternatives    = const [],
   });
 
   factory ChatApiResponse.fromJson(Map<String, dynamic> j) => ChatApiResponse(
@@ -108,5 +114,7 @@ class ChatApiResponse {
     completedActionItemIds: (j['completed_action_item_ids'] as List? ?? [])
         .map((e) => (e as num).toInt())
         .toList(),
+    scheduleConflictAlternatives:
+        (j['schedule_conflict_alternatives'] as List? ?? []),
   );
 }

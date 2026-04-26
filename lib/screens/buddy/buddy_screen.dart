@@ -38,6 +38,23 @@ const _textTer    = Color(0xFF4A4A4A);
 const _alertBg    = Color(0xFF1A0808);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Scheduling-conflict option
+// ─────────────────────────────────────────────────────────────────────────────
+class _ConflictOption {
+  final String         label;        // "A", "B", "C" …
+  final SuggestedAction action;
+  final int?           persistedId;  // null if backend didn't persist it
+  final String?        dateDisplay;  // e.g. "Today at 3:00 PM"
+
+  const _ConflictOption({
+    required this.label,
+    required this.action,
+    this.persistedId,
+    this.dateDisplay,
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Completion-intent helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -105,6 +122,10 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   String         _partialText          = '';
   PlatformFile?  _attachedFile;
   bool           _alertDismissed = false;
+
+  /// Keyed by message ID → list of conflict options waiting for the user to pick.
+  /// When the user selects an option the entry is removed and the task is created.
+  final Map<String, List<_ConflictOption>> _pendingConflicts = {};
 
   late AnimationController _waveCtrl;
   late AnimationController _overlayCtrl;
@@ -187,10 +208,19 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
         _kChatDate, DateTime.now().toIso8601String().substring(0, 10));
-    await prefs.setStringList(_kChatMessages, _messages.map((m) =>
-        jsonEncode({'id': m.id, 'role': m.role,
-                    'content': m.content, 'ts': m.timestamp.toIso8601String()})
-    ).toList());
+    // Skip messages that still have a pending conflict picker — they are
+    // transient UI state and would be meaningless after a restart.
+    await prefs.setStringList(
+        _kChatMessages,
+        _messages
+            .where((m) => !_pendingConflicts.containsKey(m.id))
+            .map((m) => jsonEncode({
+                  'id':   m.id,
+                  'role': m.role,
+                  'content': m.content,
+                  'ts':  m.timestamp.toIso8601String(),
+                }))
+            .toList());
   }
 
   Future<void> _clearHistory() async {
@@ -445,9 +475,14 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         _markObligationDone(clientMatch);
       }
 
-      // ── Auto-create tasks from suggested_actions ──────────────────────────
+      // ── Task creation / conflict handling ─────────────────────────────────
       if (apiResp.suggestedActions.isNotEmpty) {
-        _processSuggestedActions(apiResp);
+        if (apiResp.scheduleConflictAlternatives.isNotEmpty) {
+          // Conflict detected: show interactive picker instead of auto-adding
+          _queueConflictChoice(apiResp);
+        } else {
+          _processSuggestedActions(apiResp);
+        }
       }
 
       return apiResp.assistantContent;
@@ -620,6 +655,169 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
                 style: GoogleFonts.inter(
                     fontSize: 13, color: _white,
                     fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+
+  // ── Conflict-choice handling ──────────────────────────────────────────────
+
+  /// Called when the API response contains a scheduling conflict.
+  /// Instead of auto-adding all suggested actions we attach the options to
+  /// the *next* assistant message that will be appended to the chat.
+  /// We use a post-frame callback so the message is already in [_messages].
+  void _queueConflictChoice(ChatApiResponse resp) {
+    // Build the option list from suggested_actions
+    final options = <_ConflictOption>[];
+    for (int i = 0; i < resp.suggestedActions.length; i++) {
+      final action = resp.suggestedActions[i];
+      if (action.title.isEmpty) continue;
+
+      final label = String.fromCharCode(65 + i); // A, B, C …
+      final persistedId = i < resp.persistedActionItemIds.length
+          ? resp.persistedActionItemIds[i]
+          : null;
+
+      // Build a human-readable date string
+      final dateIso  = action.startsAt ?? action.remindAt;
+      String? dateDisplay;
+      if (dateIso != null) {
+        try {
+          final dt    = DateTime.parse(dateIso);
+          final local = DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute);
+          final today = DateTime(DateTime.now().year, DateTime.now().month,
+              DateTime.now().day);
+          final diff  = DateTime(local.year, local.month, local.day)
+              .difference(today)
+              .inDays;
+          final h   = local.hour % 12 == 0 ? 12 : local.hour % 12;
+          final min = local.minute.toString().padLeft(2, '0');
+          final ap  = local.hour < 12 ? 'AM' : 'PM';
+          const months = [
+            'Jan','Feb','Mar','Apr','May','Jun',
+            'Jul','Aug','Sep','Oct','Nov','Dec',
+          ];
+          final dayStr = diff == 0 ? 'Today'
+                       : diff == 1 ? 'Tomorrow'
+                       : '${months[local.month - 1]} ${local.day}';
+          dateDisplay = '$dayStr at $h:$min $ap';
+        } catch (_) {}
+      }
+
+      options.add(_ConflictOption(
+        label:       label,
+        action:      action,
+        persistedId: persistedId,
+        dateDisplay: dateDisplay,
+      ));
+    }
+
+    if (options.isEmpty) {
+      // Nothing usable — fall back to normal processing
+      _processSuggestedActions(resp);
+      return;
+    }
+
+    // Attach to the assistant message that _sendMessage() will add next.
+    // We use a post-frame callback to grab the message ID after it is inserted.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // The last assistant message is the one we just added
+      final assistantMsgs = _messages.where((m) => m.role == 'assistant');
+      if (assistantMsgs.isEmpty) return;
+      final msgId = assistantMsgs.last.id;
+      setState(() => _pendingConflicts[msgId] = options);
+    });
+  }
+
+  /// Creates a single [ObligationModel] from the chosen conflict option and
+  /// removes the conflict picker from the chat.
+  void _resolveConflict(String messageId, _ConflictOption chosen) {
+    if (!mounted) return;
+
+    final action    = chosen.action;
+    final dateIso   = action.startsAt ?? action.remindAt;
+    final id        = chosen.persistedId != null
+        ? 'buddy_action_${chosen.persistedId}'
+        : 'buddy_${DateTime.now().millisecondsSinceEpoch}';
+
+    int daysUntil = 1;
+    if (dateIso != null) {
+      try {
+        final dt    = DateTime.parse(dateIso);
+        final local = DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute);
+        final today = DateTime(DateTime.now().year, DateTime.now().month,
+            DateTime.now().day);
+        daysUntil = DateTime(local.year, local.month, local.day)
+            .difference(today)
+            .inDays;
+      } catch (_) {}
+    }
+
+    final risk  = daysUntil <= 0 ? 'high'
+                : daysUntil < 7  ? 'high'
+                : daysUntil < 30 ? 'medium'
+                : 'low';
+    final emoji = action.kind == 'event' ? '📅' : '✅';
+
+    final ob = ObligationModel(
+      id:            id,
+      emoji:         emoji,
+      title:         action.title,
+      type:          'custom',
+      daysUntil:     daysUntil,
+      risk:          risk,
+      status:        'active',
+      executionPath: 'Scheduled by Buddy',
+      notes:         chosen.dateDisplay,
+      source:        'buddy',
+      startsAt:      dateIso,
+    );
+
+    ref.read(appStateProvider.notifier).addObligations([ob]);
+
+    // Replace the conflict picker with a resolved confirmation message
+    setState(() {
+      _pendingConflicts.remove(messageId);
+      // Find and replace the assistant message text with a confirmation
+      final idx = _messages.indexWhere((m) => m.id == messageId);
+      if (idx != -1) {
+        final original = _messages[idx];
+        _messages[idx] = ChatMessageModel(
+          id:        original.id,
+          role:      original.role,
+          content:   '${original.content}\n\n✅ Option ${chosen.label} scheduled'
+                     '${chosen.dateDisplay != null ? ' — ${chosen.dateDisplay}' : ''}.',
+          timestamp: original.timestamp,
+        );
+      }
+    });
+    _saveHistory();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFF0F3D35),
+          behavior:        SnackBarBehavior.floating,
+          margin:          const EdgeInsets.fromLTRB(16, 0, 80, 10),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          duration: const Duration(seconds: 3),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle_outline_rounded,
+                  color: _verdigris, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '✓ "${action.title}" added to your list',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, color: _white,
+                      fontWeight: FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -898,7 +1096,15 @@ Currency: AED. Context: Dubai, UAE.''';
   }
 
   Widget _buildMessageBubble(ChatMessageModel msg) {
-    final isUser = msg.role == 'user';
+    final isUser   = msg.role == 'user';
+    final conflict = _pendingConflicts[msg.id];
+
+    // ── Conflict-choice bubble ─────────────────────────────────────────────
+    if (conflict != null && !isUser) {
+      return _buildConflictBubble(msg, conflict);
+    }
+
+    // ── Normal bubble ──────────────────────────────────────────────────────
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
@@ -935,6 +1141,135 @@ Currency: AED. Context: Dubai, UAE.''';
           ),
           if (isUser) const SizedBox(width: 8),
         ],
+      ),
+    );
+  }
+
+  /// Renders an assistant bubble that includes interactive A/B/C option cards
+  /// below the text when a scheduling conflict has been detected.
+  Widget _buildConflictBubble(
+      ChatMessageModel msg, List<_ConflictOption> options) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: _BuddyAvatar(gender: _avatarGender, size: 28),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Assistant text
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 12),
+                  constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.78),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F3D35),
+                    borderRadius: const BorderRadius.only(
+                      topLeft:     Radius.circular(18),
+                      topRight:    Radius.circular(18),
+                      bottomLeft:  Radius.circular(4),
+                      bottomRight: Radius.circular(18),
+                    ),
+                    border: Border.all(color: _verdigris.withOpacity(0.3)),
+                  ),
+                  child: Text(msg.content,
+                      style: GoogleFonts.inter(
+                          fontSize: 14, color: _white, height: 1.55)),
+                ),
+                const SizedBox(height: 10),
+                // Conflict label
+                Padding(
+                  padding: const EdgeInsets.only(left: 2, bottom: 8),
+                  child: Text(
+                    'Pick one option to schedule:',
+                    style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: _textSec,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+                // Option cards
+                ...options.map((opt) => _buildConflictOptionCard(
+                    msg.id, opt)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConflictOptionCard(String msgId, _ConflictOption opt) {
+    final emoji = opt.action.kind == 'event' ? '📅' : '✅';
+    return GestureDetector(
+      onTap: () => _resolveConflict(msgId, opt),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.78),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: _surfaceEl,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _verdigris.withOpacity(0.45)),
+        ),
+        child: Row(
+          children: [
+            // Label badge
+            Container(
+              width: 28, height: 28,
+              decoration: BoxDecoration(
+                color: _verdigris.withOpacity(0.18),
+                shape: BoxShape.circle,
+                border: Border.all(color: _verdigris.withOpacity(0.6)),
+              ),
+              child: Center(
+                child: Text(
+                  opt.label,
+                  style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _verdigris),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Title + date
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$emoji ${opt.action.title}',
+                    style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: _white),
+                  ),
+                  if (opt.dateDisplay != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      opt.dateDisplay!,
+                      style: GoogleFonts.inter(
+                          fontSize: 11, color: _textSec),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right_rounded,
+                color: _verdigris, size: 18),
+          ],
+        ),
       ),
     );
   }
