@@ -380,6 +380,8 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
         context.push(AppRoutes.profileBuddySettings);
       case 'Automation':
         context.push(AppRoutes.profileAutomation);
+      case 'Document Wallet':
+        context.push(AppRoutes.documentWallet);
     }
   }
 
@@ -412,6 +414,9 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
     _ProfileSection(label: 'Automation',
       iconBg: const Color(0xFF0A2A28),
       icon: const Icon(Icons.smart_toy_rounded, color: Color(0xFF26C6DA), size: 22)),
+    _ProfileSection(label: 'Document Wallet',
+      iconBg: const Color(0xFF1A2E1A),
+      icon: const Icon(Icons.drive_file_move_rounded, color: Color(0xFF4CAF50), size: 22)),
   ];
 }
 

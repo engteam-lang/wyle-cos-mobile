@@ -30,6 +30,7 @@ import '../screens/connect/buddy_settings_screen.dart';
 import '../screens/connect/automation_screen.dart';
 import '../screens/brief/morning_brief_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/wallet/document_wallet_screen.dart';
 import '../screens/main/main_screen.dart';
 import '../screens/onboarding/auth_callback_screen.dart';
 
@@ -63,6 +64,7 @@ class AppRoutes {
   static const profileAutomation   = '/profile/automation';
   static const sessionHistory      = '/session-history';
   static const morningBrief        = '/morning-brief';
+  static const documentWallet      = '/document-wallet';
   static const settings            = '/settings';
   static const authCallback        = '/auth-callback';
 }
@@ -177,8 +179,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           fullscreenDialog: true,
         ),
       ),
-      GoRoute(path: AppRoutes.morningBrief,  builder: (_, __) => const MorningBriefScreen()),
-      GoRoute(path: AppRoutes.settings,     builder: (_, __) => const SettingsScreen()),
+      GoRoute(path: AppRoutes.morningBrief,   builder: (_, __) => const MorningBriefScreen()),
+      GoRoute(path: AppRoutes.documentWallet, builder: (_, __) => const DocumentWalletScreen()),
+      GoRoute(path: AppRoutes.settings,       builder: (_, __) => const SettingsScreen()),
       // OAuth callback — Wyle backend redirects here after login.
       GoRoute(
         path: AppRoutes.authCallback,

@@ -16,6 +16,7 @@ import '../models/conversation_model.dart';
 import '../models/email_sync_model.dart';
 import '../models/insights_summary_model.dart';
 import '../models/brief_api_model.dart';
+import '../models/wallet_document_model.dart';
 
 /// Single Dio client for all https://api.wyle.ai/v1 endpoints.
 ///
@@ -326,6 +327,25 @@ class BuddyApiService {
       data: formData,
     );
     return ChatUploadResponse.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Document Wallet
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// GET /v1/document-wallet/documents?limit=[limit]
+  ///
+  /// Returns all documents uploaded via the chat (newest first).
+  /// Each document is stored in the user's Google Drive and indexed here.
+  Future<List<WalletDocumentModel>> getWalletDocuments({int limit = 100}) async {
+    final res = await _dio.get(
+      '/document-wallet/documents',
+      queryParameters: {'limit': limit},
+    );
+    final list = res.data as List? ?? [];
+    return list
+        .map((e) => WalletDocumentModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   // ══════════════════════════════════════════════════════════════════════════
