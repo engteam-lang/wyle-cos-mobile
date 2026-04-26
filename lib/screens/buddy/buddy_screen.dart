@@ -482,16 +482,79 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         }
       }
 
-      // Append a Drive-saved confirmation line if the backend returned a link
-      String reply = apiResp.assistantContent;
+      // Show Drive-saved confirmation if the backend returned a link
       if (apiResp.webViewLink != null && apiResp.webViewLink!.isNotEmpty) {
         _showDriveSnackbar(file.name, apiResp.webViewLink!);
       }
 
-      return reply;
+      return apiResp.assistantContent;
+    } on DioException catch (e) {
+      // Parse the error body to check for a known Drive error code
+      final data = e.response?.data;
+      String? errorCode;
+      if (data is Map) errorCode = data['error_code'] as String?;
+
+      if (errorCode == 'drive_upload_failed') {
+        // Drive not connected — show a prompt but still allow AiService fallback
+        _showDriveNotConnectedBanner();
+      }
+      // Any other error: silently fall back to AiService
+      return null;
     } catch (_) {
       return null;
     }
+  }
+
+  /// Shows a persistent banner when Drive is not connected.
+  /// The user can tap "Connect" to go to Calendar & Email settings.
+  void _showDriveNotConnectedBanner() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF1A0808),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 8),
+        content: Row(
+          children: [
+            const Icon(Icons.drive_file_move_outlined,
+                color: Color(0xFFFF9800), size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Google Drive not connected. '
+                'Connect it in Profile → Calendar & Email to save files.',
+                style: GoogleFonts.inter(
+                    fontSize: 12, color: _white, height: 1.4),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                context.push(AppRoutes.calendarEmail);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF9800).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: const Color(0xFFFF9800).withOpacity(0.5)),
+                ),
+                child: Text('Connect',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, color: const Color(0xFFFF9800),
+                        fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showDriveSnackbar(String filename, String webViewLink) {
