@@ -88,6 +88,8 @@ class ChatApiResponse {
   /// Each element is a raw JSON object from the backend; the UI only needs to
   /// know that this list is non-empty to trigger the interactive picker.
   final List<dynamic>  scheduleConflictAlternatives;
+  /// True when the backend cleared all tasks for the user.
+  final bool           taskListClearAll;
 
   const ChatApiResponse({
     required this.conversationId,
@@ -98,6 +100,7 @@ class ChatApiResponse {
     required this.persistedActionItemIds,
     this.completedActionItemIds          = const [],
     this.scheduleConflictAlternatives    = const [],
+    this.taskListClearAll                = false,
   });
 
   factory ChatApiResponse.fromJson(Map<String, dynamic> j) => ChatApiResponse(
@@ -116,5 +119,7 @@ class ChatApiResponse {
         .toList(),
     scheduleConflictAlternatives:
         ((j['ai_meta'] as Map<String, dynamic>?)?['schedule_conflict_alternatives'] as List? ?? []),
+    taskListClearAll:
+        ((j['ai_meta'] as Map<String, dynamic>?)?['task_list_clear_all'] as bool?) ?? false,
   );
 }

@@ -475,6 +475,12 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         _markObligationDone(clientMatch);
       }
 
+      // ── Task clearing ─────────────────────────────────────────────────────
+      if (apiResp.taskListClearAll) {
+        ref.read(appStateProvider.notifier).setObligations([]);
+        ref.read(appStateProvider.notifier).setActionItems([]);
+      }
+
       // ── Task creation / conflict handling ─────────────────────────────────
       if (apiResp.suggestedActions.isNotEmpty) {
         if (apiResp.scheduleConflictAlternatives.isNotEmpty) {
