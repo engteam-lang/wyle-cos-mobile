@@ -15,6 +15,7 @@ import '../models/brain_dump_model.dart';
 import '../models/conversation_model.dart';
 import '../models/email_sync_model.dart';
 import '../models/insights_summary_model.dart';
+import '../models/brief_api_model.dart';
 
 /// Single Dio client for all https://api.wyle.ai/v1 endpoints.
 ///
@@ -287,6 +288,42 @@ class BuddyApiService {
   Future<EmailSyncJobModel> getEmailSyncJob(int jobId) async {
     final res = await _dio.get('/integrations/email/sync/jobs/$jobId');
     return EmailSyncJobModel.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Briefs
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// GET /v1/briefs?days=[days]
+  ///
+  /// Returns stored morning/evening briefs for the given window (default 7 days,
+  /// max 30). For today, the backend auto-generates a brief if the scheduled
+  /// time has passed and no row exists yet.
+  Future<BriefListResponse> getBriefs({int days = 7}) async {
+    final res = await _dio.get(
+      '/briefs',
+      queryParameters: {'days': days},
+    );
+    return BriefListResponse.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  /// PATCH /v1/briefs/schedule
+  ///
+  /// Updates morning/evening times (HH:MM 24-hour) and/or the enabled flag.
+  /// At least one field must be non-null.
+  Future<BriefScheduleResponse> patchBriefSchedule({
+    String? morningBriefLocal,
+    String? eveningBriefLocal,
+    bool?   briefsEnabled,
+  }) async {
+    final body = <String, dynamic>{};
+    if (morningBriefLocal != null) body['morning_brief_local'] = morningBriefLocal;
+    if (eveningBriefLocal != null) body['evening_brief_local'] = eveningBriefLocal;
+    if (briefsEnabled     != null) body['briefs_enabled']      = briefsEnabled;
+    if (body.isEmpty) throw ArgumentError('At least one field is required');
+
+    final res = await _dio.patch('/briefs/schedule', data: body);
+    return BriefScheduleResponse.fromJson(res.data as Map<String, dynamic>);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
