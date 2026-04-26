@@ -536,9 +536,22 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
       if (errorCode == 'drive_upload_failed') {
         debugPrint('[Upload] ⚠ Drive scope missing — showing reconnect banner');
+        // ── Extra diagnostic: fetch /v1/users/me and dump linked accounts ─────
+        // This tells us exactly what scopes/accounts the server sees for this user.
+        try {
+          final me = await BuddyApiService.instance.getMe();
+          debugPrint('[Upload] getMe() at time of drive error: $me');
+          final linked = me['linked_accounts'] as List? ?? [];
+          debugPrint('[Upload] linked_accounts count: ${linked.length}');
+          for (var i = 0; i < linked.length; i++) {
+            debugPrint('[Upload]   [$i] ${linked[i]}');
+          }
+        } catch (meErr) {
+          debugPrint('[Upload] getMe() diagnostic failed: $meErr');
+        }
         _showDriveNotConnectedBanner();
       } else {
-        debugPrint('[Upload] ↩ Unhandled error — falling back to AiService');
+        debugPrint('[Upload] ↩ Unhandled error (code=$errorCode) — falling back to AiService');
       }
       return null;
 

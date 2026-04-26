@@ -79,6 +79,39 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
     _slideAnim = Tween<Offset>(
             begin: const Offset(0, 0.05), end: Offset.zero)
         .animate(CurvedAnimation(parent: _enterCtrl, curve: Curves.easeOut));
+
+    // ── Diagnostic: dump server-side account state on every screen open ───────
+    _debugDumpServerAccountState();
+  }
+
+  /// Calls GET /v1/users/me and logs the full response including linked_accounts.
+  /// This runs every time Calendar & Email is opened so we can see exactly
+  /// what the backend knows about this user's connected accounts and scopes.
+  Future<void> _debugDumpServerAccountState() async {
+    try {
+      debugPrint('[AccountState] ▶ Fetching /v1/users/me for diagnostics…');
+      final me = await BuddyApiService.instance.getMe();
+      debugPrint('[AccountState] Full /v1/users/me response:');
+      debugPrint('[AccountState]   $me');
+      final linked = me['linked_accounts'] as List? ?? [];
+      debugPrint('[AccountState] linked_accounts (${linked.length} entries):');
+      for (var i = 0; i < linked.length; i++) {
+        debugPrint('[AccountState]   [$i] ${linked[i]}');
+      }
+      // Check for drive scope specifically
+      final hasGoogleDrive = linked.any((a) {
+        final m = a as Map<String, dynamic>;
+        final provider = (m['provider'] as String? ?? '').toLowerCase();
+        final scopes   = (m['scopes'] as List? ?? []).cast<String>();
+        final scopeStr = (m['scope'] as String? ?? '');
+        return provider == 'google' &&
+            (scopes.any((s) => s.contains('drive')) ||
+             scopeStr.contains('drive'));
+      });
+      debugPrint('[AccountState] Has Google Drive scope: $hasGoogleDrive');
+    } catch (e) {
+      debugPrint('[AccountState] ❌ getMe() diagnostic failed: $e');
+    }
   }
 
   @override
@@ -94,9 +127,30 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
 
   Future<void> _connectGoogle() async {
     try {
+      debugPrint('[OAuth] ▶ Calling startOAuth(google)');
       final result = await BuddyApiService.instance.startOAuth('google');
+      debugPrint('[OAuth] Full response: $result');
+
       final authUrl = result['auth_url'] as String?;
-      if (authUrl == null || authUrl.isEmpty) return;
+      if (authUrl == null || authUrl.isEmpty) {
+        debugPrint('[OAuth] ❌ auth_url is null or empty');
+        return;
+      }
+
+      // Log the full auth URL so we can inspect which scopes are being requested
+      debugPrint('[OAuth] ✅ auth_url received (${authUrl.length} chars)');
+      debugPrint('[OAuth] auth_url: $authUrl');
+
+      // Parse & log scope param explicitly
+      try {
+        final parsed = Uri.parse(authUrl);
+        // Google's URL might be a redirect through the backend — check both
+        final scope = parsed.queryParameters['scope'] ??
+            parsed.queryParameters['scopes'] ?? '(not in top-level params)';
+        debugPrint('[OAuth] scope param: $scope');
+        debugPrint('[OAuth] all params : ${parsed.queryParameters}');
+      } catch (_) {}
+
       await launchUrl(Uri.parse(authUrl),
           mode: LaunchMode.externalApplication);
       // On web the deep-link (com.wyle.buddy://...) won't fire automatically.
@@ -106,6 +160,7 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
         setState(() => _showGoogleTokenEntry = true);
       }
     } catch (e) {
+      debugPrint('[OAuth] ❌ startOAuth(google) failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           _snackBar('Could not start Google sign-in. Please try again.',
@@ -184,21 +239,38 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
     setApplying(true);
     try {
       // ── 2. Persist the new token ─────────────────────────────────────────────
+      debugPrint('[TokenApply] ▶ Applying token for provider=$provider');
+      debugPrint('[TokenApply]   token length : ${token.length}');
+      debugPrint('[TokenApply]   token prefix : ${token.substring(0, token.length.clamp(0, 40))}…');
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(AppConstants.keyAuthToken, token);
+      debugPrint('[TokenApply] ✅ Token saved to SharedPreferences');
 
       // ── 3. Fetch updated profile (Dio interceptor will use the new token) ────
       Map<String, dynamic>? profile;
       try {
+        debugPrint('[TokenApply] Calling getMe() to read linked accounts…');
         profile = await BuddyApiService.instance.getMe();
-      } catch (_) {}
+        // Log the FULL profile so we can see exactly what the server returns
+        debugPrint('[TokenApply] getMe() raw response: $profile');
+      } catch (e) {
+        debugPrint('[TokenApply] ❌ getMe() failed: $e');
+      }
 
       if (profile != null) {
         final email    = profile['email']     as String? ?? '';
         final fullName = profile['full_name'] as String? ?? '';
+        debugPrint('[TokenApply] profile.email     : $email');
+        debugPrint('[TokenApply] profile.full_name : $fullName');
 
         // Parse linked_accounts list if present
         final linkedAccounts = profile['linked_accounts'] as List? ?? [];
+        debugPrint('[TokenApply] linked_accounts count: ${linkedAccounts.length}');
+        for (var i = 0; i < linkedAccounts.length; i++) {
+          debugPrint('[TokenApply]   [$i] ${linkedAccounts[i]}');
+        }
+
         String? googleEmail;
         String? outlookEmail;
         for (final acct in linkedAccounts) {
@@ -208,14 +280,18 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
           if (p == 'google'     && e.isNotEmpty) googleEmail  = e;
           if ((p == 'microsoft' || p == 'outlook') && e.isNotEmpty) outlookEmail = e;
         }
+        debugPrint('[TokenApply] resolved googleEmail : $googleEmail');
+        debugPrint('[TokenApply] resolved outlookEmail: $outlookEmail');
 
         if (provider == 'google') {
           final acctEmail = googleEmail ?? email;
+          debugPrint('[TokenApply] Adding Google account: $acctEmail');
           if (acctEmail.isNotEmpty) {
             await ref.read(appStateProvider.notifier).addGoogleAccount(acctEmail);
           }
         } else {
           final acctEmail = outlookEmail ?? email;
+          debugPrint('[TokenApply] Adding Outlook account: $acctEmail');
           if (acctEmail.isNotEmpty) {
             await ref.read(appStateProvider.notifier).addOutlookAccount(acctEmail);
           }
@@ -225,9 +301,11 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
         final currentUser = ref.read(appStateProvider).user;
         if (currentUser != null) {
           await ref.read(appStateProvider.notifier).setAuth(token, currentUser);
+          debugPrint('[TokenApply] ✅ setAuth called — app state updated');
         }
       } else {
         // getMe() failed — token saved but couldn't confirm account; mark connected
+        debugPrint('[TokenApply] ⚠ getMe() returned null — marking connected with placeholder');
         if (provider == 'google') {
           await ref.read(appStateProvider.notifier)
               .addGoogleAccount('connected@google.com');
