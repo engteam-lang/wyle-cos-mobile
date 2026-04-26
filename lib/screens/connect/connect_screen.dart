@@ -43,9 +43,6 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
   late Animation<double>   _fadeAnim;
   late Animation<Offset>   _slideAnim;
 
-  // Morning brief time (stub — persisted via provider later)
-  TimeOfDay _briefTime = const TimeOfDay(hour: 6, minute: 0);
-
   @override
   void initState() {
     super.initState();
@@ -105,9 +102,9 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
 
                           // ── Settings rows ──────────────────────────────────
                           _buildSettingsRow(
-                            label: 'Morning Brief Time',
-                            value: _briefTime.format(context),
-                            onTap: _pickBriefTime,
+                            label: 'Daily Briefs',
+                            value: 'Schedule & history',
+                            onTap: () => context.push(AppRoutes.morningBrief),
                           ),
                           const SizedBox(height: 10),
                           _buildSettingsRow(
@@ -330,23 +327,6 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
-  Future<void> _pickBriefTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _briefTime,
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: Color(0xFF1B998B),
-            surface: Color(0xFF132E2A),
-          ),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked != null) setState(() => _briefTime = picked);
-  }
-
   void _confirmSignOut(BuildContext context) {
     showDialog(
       context: context,
