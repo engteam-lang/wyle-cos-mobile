@@ -1,0 +1,18 @@
+html,
+body,
+#flutter_app_container {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100vh;
+  /* Must be 100% of the sidebar height */
+  overflow: hidden;
+  background-color: white;
+  /* Helps you see if it's actually loading */
+}
+
+/* Ensure the Flutter engine fills the panel */
+#flutter_host {
+  width: 100vw;
+  height: 100vh;
+}
