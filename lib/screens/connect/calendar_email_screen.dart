@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../constants/app_constants.dart';
 import '../../models/email_sync_model.dart';
 import '../../providers/app_state.dart';
 import '../../services/buddy_api_service.dart';
@@ -57,6 +60,15 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
   _SyncState _outlookSyncState = _SyncState.idle;
   String?    _outlookSyncError;
 
+  // ── Web-only manual token entry ────────────────────────────────────────────
+  // These are ONLY shown when kIsWeb == true and never appear in APK/IPA builds.
+  bool _showGoogleTokenEntry  = false;
+  bool _showOutlookTokenEntry = false;
+  bool _applyingGoogleToken   = false;
+  bool _applyingOutlookToken  = false;
+  final TextEditingController _googleTokenCtrl  = TextEditingController();
+  final TextEditingController _outlookTokenCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +85,8 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
   void dispose() {
     _enterCtrl.dispose();
     _pollTimer?.cancel();
+    _googleTokenCtrl.dispose();
+    _outlookTokenCtrl.dispose();
     super.dispose();
   }
 
@@ -85,6 +99,12 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
       if (authUrl == null || authUrl.isEmpty) return;
       await launchUrl(Uri.parse(authUrl),
           mode: LaunchMode.externalApplication);
+      // On web the deep-link (com.wyle.buddy://...) won't fire automatically.
+      // Reveal the manual token entry so the user can paste the auth_token
+      // from the browser's callback URL.
+      if (kIsWeb && mounted) {
+        setState(() => _showGoogleTokenEntry = true);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -102,6 +122,10 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
       if (authUrl == null || authUrl.isEmpty) return;
       await launchUrl(Uri.parse(authUrl),
           mode: LaunchMode.externalApplication);
+      // Same web workaround as Google.
+      if (kIsWeb && mounted) {
+        setState(() => _showOutlookTokenEntry = true);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -111,6 +135,144 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
       }
     }
   }
+
+  // ── Web-only token application ─────────────────────────────────────────────
+
+  /// Accepts either a bare JWT string or a full callback URL containing
+  /// auth_token / token / access_token as a query parameter.
+  /// Saves to SharedPreferences, calls getMe() to read linked accounts,
+  /// then updates appStateProvider accordingly.
+  Future<void> _applyToken({
+    required String          rawInput,
+    required String          provider,   // 'google' | 'microsoft'
+    required void Function(bool) setApplying,
+    required VoidCallback    onSuccess,
+  }) async {
+    // ── 1. Extract token from raw input ───────────────────────────────────────
+    String token = rawInput.trim();
+    try {
+      final uri = Uri.tryParse(token);
+      if (uri != null) {
+        // Standard query params
+        final q = uri.queryParameters['auth_token'] ??
+            uri.queryParameters['token'] ??
+            uri.queryParameters['access_token'];
+        if (q != null && q.isNotEmpty) {
+          token = q;
+        } else if (uri.fragment.contains('?')) {
+          // Hash-based routing: /#/auth-callback?auth_token=...
+          final qPart = uri.fragment.substring(uri.fragment.indexOf('?') + 1);
+          final fromFrag = Uri.splitQueryString(qPart);
+          final t = fromFrag['auth_token'] ??
+              fromFrag['token'] ??
+              fromFrag['access_token'];
+          if (t != null && t.isNotEmpty) token = t;
+        }
+      }
+    } catch (_) {}
+
+    if (token.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(_snackBar(
+          'Token is empty. Copy the auth_token value from the browser URL.',
+          isError: true,
+        ));
+      }
+      return;
+    }
+
+    setApplying(true);
+    try {
+      // ── 2. Persist the new token ─────────────────────────────────────────────
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(AppConstants.keyAuthToken, token);
+
+      // ── 3. Fetch updated profile (Dio interceptor will use the new token) ────
+      Map<String, dynamic>? profile;
+      try {
+        profile = await BuddyApiService.instance.getMe();
+      } catch (_) {}
+
+      if (profile != null) {
+        final email    = profile['email']     as String? ?? '';
+        final fullName = profile['full_name'] as String? ?? '';
+
+        // Parse linked_accounts list if present
+        final linkedAccounts = profile['linked_accounts'] as List? ?? [];
+        String? googleEmail;
+        String? outlookEmail;
+        for (final acct in linkedAccounts) {
+          final m = acct as Map<String, dynamic>;
+          final p = (m['provider'] as String? ?? '').toLowerCase();
+          final e = (m['email'] as String? ?? m['account_email'] as String? ?? '');
+          if (p == 'google'     && e.isNotEmpty) googleEmail  = e;
+          if ((p == 'microsoft' || p == 'outlook') && e.isNotEmpty) outlookEmail = e;
+        }
+
+        if (provider == 'google') {
+          final acctEmail = googleEmail ?? email;
+          if (acctEmail.isNotEmpty) {
+            await ref.read(appStateProvider.notifier).addGoogleAccount(acctEmail);
+          }
+        } else {
+          final acctEmail = outlookEmail ?? email;
+          if (acctEmail.isNotEmpty) {
+            await ref.read(appStateProvider.notifier).addOutlookAccount(acctEmail);
+          }
+        }
+
+        // Re-save updated token + user into app state
+        final currentUser = ref.read(appStateProvider).user;
+        if (currentUser != null) {
+          await ref.read(appStateProvider.notifier).setAuth(token, currentUser);
+        }
+      } else {
+        // getMe() failed — token saved but couldn't confirm account; mark connected
+        if (provider == 'google') {
+          await ref.read(appStateProvider.notifier)
+              .addGoogleAccount('connected@google.com');
+        } else {
+          await ref.read(appStateProvider.notifier)
+              .addOutlookAccount('connected@outlook.com');
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(_snackBar('Account connected successfully ✓'));
+        onSuccess();
+      }
+    } catch (e) {
+      setApplying(false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          _snackBar('Failed to apply token. Please try again.', isError: true),
+        );
+      }
+    }
+  }
+
+  void _applyGoogleToken() => _applyToken(
+    rawInput:    _googleTokenCtrl.text,
+    provider:    'google',
+    setApplying: (v) => setState(() => _applyingGoogleToken = v),
+    onSuccess:   () => setState(() {
+      _showGoogleTokenEntry  = false;
+      _applyingGoogleToken   = false;
+      _googleTokenCtrl.clear();
+    }),
+  );
+
+  void _applyOutlookToken() => _applyToken(
+    rawInput:    _outlookTokenCtrl.text,
+    provider:    'microsoft',
+    setApplying: (v) => setState(() => _applyingOutlookToken = v),
+    onSuccess:   () => setState(() {
+      _showOutlookTokenEntry  = false;
+      _applyingOutlookToken   = false;
+      _outlookTokenCtrl.clear();
+    }),
+  );
 
   // ── Gmail email sync ───────────────────────────────────────────────────────
 
@@ -438,6 +600,24 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
             ),
             const SizedBox(height: 10),
             _demoSyncBtn(),
+            // ── Web-only: manual token paste panel ────────────────────────────
+            if (kIsWeb) ...[
+              const SizedBox(height: 8),
+              if (!_showGoogleTokenEntry)
+                _webTokenHint(
+                  onTap: () => setState(() => _showGoogleTokenEntry = true),
+                )
+              else
+                _buildTokenEntry(
+                  ctrl:     _googleTokenCtrl,
+                  applying: _applyingGoogleToken,
+                  onApply:  _applyGoogleToken,
+                  onDismiss: () => setState(() {
+                    _showGoogleTokenEntry = false;
+                    _googleTokenCtrl.clear();
+                  }),
+                ),
+            ],
           ],
 
           // ── Connected ──────────────────────────────────────────────────────
@@ -576,6 +756,25 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
             ),
             const SizedBox(height: 10),
             _demoSyncBtn(provider: 'microsoft'),
+            // ── Web-only: manual token paste panel ────────────────────────────
+            if (kIsWeb) ...[
+              const SizedBox(height: 8),
+              if (!_showOutlookTokenEntry)
+                _webTokenHint(
+                  color: _blue,
+                  onTap: () => setState(() => _showOutlookTokenEntry = true),
+                )
+              else
+                _buildTokenEntry(
+                  ctrl:     _outlookTokenCtrl,
+                  applying: _applyingOutlookToken,
+                  onApply:  _applyOutlookToken,
+                  onDismiss: () => setState(() {
+                    _showOutlookTokenEntry = false;
+                    _outlookTokenCtrl.clear();
+                  }),
+                ),
+            ],
           ],
 
           // ── Connected ──────────────────────────────────────────────────────
@@ -739,6 +938,133 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
                   fontSize: 13, fontWeight: FontWeight.w500,
                   color: _amber)),
         ]),
+      ),
+    );
+  }
+
+  // ── Web-only: "Already have a token?" hint link ────────────────────────────
+  /// Shown only on kIsWeb when the token panel is hidden.
+  Widget _webTokenHint({Color color = _green, required VoidCallback onTap}) =>
+      GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.key_outlined, color: color.withOpacity(0.6), size: 13),
+            const SizedBox(width: 5),
+            Text(
+              'Already completed sign-in? Paste your token here',
+              style: GoogleFonts.inter(
+                  fontSize: 11,
+                  color: color.withOpacity(0.7),
+                  decoration: TextDecoration.underline,
+                  decorationColor: color.withOpacity(0.4)),
+            ),
+          ]),
+        ),
+      );
+
+  // ── Web-only: collapsible token paste panel ────────────────────────────────
+  /// Never rendered on Android/iOS — guarded by `if (kIsWeb)` at call-sites.
+  Widget _buildTokenEntry({
+    required TextEditingController ctrl,
+    required bool                  applying,
+    required VoidCallback          onApply,
+    required VoidCallback          onDismiss,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(top: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF071E28),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _amber.withOpacity(0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(children: [
+            const Icon(Icons.key_rounded, color: _amber, size: 14),
+            const SizedBox(width: 7),
+            Text('Paste Auth Token',
+                style: GoogleFonts.poppins(
+                    fontSize: 12, fontWeight: FontWeight.w600, color: _white)),
+            const Spacer(),
+            GestureDetector(
+              onTap: onDismiss,
+              child: const Icon(Icons.close_rounded, color: _textSec, size: 15),
+            ),
+          ]),
+          const SizedBox(height: 6),
+          // Instruction text
+          Text(
+            'After the browser login completes, copy the full callback URL '
+            '(or just the auth_token= value) from the address bar and paste it below.',
+            style: GoogleFonts.inter(
+                fontSize: 11, color: _textSec, height: 1.45),
+          ),
+          const SizedBox(height: 10),
+          // Token text field
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF0D2028),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _border),
+            ),
+            child: TextField(
+              controller: ctrl,
+              enabled: !applying,
+              style: GoogleFonts.sourceCodePro(
+                  fontSize: 11, color: _white, height: 1.5),
+              maxLines: 3,
+              minLines: 2,
+              decoration: InputDecoration(
+                contentPadding: const EdgeInsets.all(12),
+                hintText: 'https://…?auth_token=eyJ…   or just the token',
+                hintStyle: GoogleFonts.inter(
+                    fontSize: 10,
+                    color: _textSec.withOpacity(0.45)),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Apply button / spinner
+          applying
+              ? const Center(
+                  child: SizedBox(
+                    width: 22, height: 22,
+                    child: CircularProgressIndicator(
+                        color: _amber, strokeWidth: 2),
+                  ),
+                )
+              : GestureDetector(
+                  onTap: onApply,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _amber.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _amber.withOpacity(0.45)),
+                    ),
+                    child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.check_circle_outline_rounded,
+                              color: _amber, size: 14),
+                          const SizedBox(width: 7),
+                          Text('Apply Token',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _amber)),
+                        ]),
+                  ),
+                ),
+        ],
       ),
     );
   }
