@@ -405,14 +405,22 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         // File attachments: try the Buddy upload API first (saves to Drive +
         // indexes in Document Wallet + runs AI pipeline).
         // Falls back to AiService if Drive is not connected or the API fails.
-        response = await _sendViaUploadApi(file!, aiMessage)
-            ?? await AiService.instance.completeWithFile(
-                 systemPrompt: _buildSystemPrompt(obligations),
-                 userMessage:  aiMessage,
-                 fileBytes:    file!.bytes!,
-                 mimeType:     _mimeType(file.extension),
-                 maxTokens:    1500,
-               );
+        debugPrint('[Send] 📎 File attached — attempting upload API first');
+        final uploadResult = await _sendViaUploadApi(file!, aiMessage);
+        if (uploadResult != null) {
+          debugPrint('[Send] ✅ Upload API succeeded — using its response');
+          response = uploadResult;
+        } else {
+          debugPrint('[Send] ↩ Upload API returned null — falling back to AiService');
+          response = await AiService.instance.completeWithFile(
+            systemPrompt: _buildSystemPrompt(obligations),
+            userMessage:  aiMessage,
+            fileBytes:    file!.bytes!,
+            mimeType:     _mimeType(file.extension),
+            maxTokens:    1500,
+          );
+          debugPrint('[Send] ✅ AiService fallback completed');
+        }
       } else {
         // Text messages: try Buddy API first, fall back to AiService
         response = await _sendViaBuddyApi(aiMessage)
@@ -450,15 +458,26 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   /// (caller falls back to AiService).
   Future<String?> _sendViaUploadApi(PlatformFile file, String caption) async {
     final bytes = file.bytes;
-    if (bytes == null || bytes.isEmpty) return null;
+    if (bytes == null || bytes.isEmpty) {
+      debugPrint('[Upload] ❌ Aborted — file.bytes is null or empty '
+          '(name=${file.name}, size=${file.size})');
+      return null;
+    }
+
+    final convId   = ref.read(appStateProvider).activeConversationId;
+    final mime     = _mimeType(file.extension);
+    final filename = file.name.isNotEmpty
+        ? file.name
+        : 'attachment.${file.extension ?? 'bin'}';
+
+    debugPrint('[Upload] ▶ Starting upload');
+    debugPrint('[Upload]   filename    : $filename');
+    debugPrint('[Upload]   mimeType    : $mime');
+    debugPrint('[Upload]   bytes       : ${bytes.length}');
+    debugPrint('[Upload]   conversationId: $convId');
+    debugPrint('[Upload]   caption     : "${caption.trim()}"');
 
     try {
-      final convId   = ref.read(appStateProvider).activeConversationId;
-      final mime     = _mimeType(file.extension);
-      final filename = file.name.isNotEmpty
-          ? file.name
-          : 'attachment.${file.extension ?? 'bin'}';
-
       final apiResp = await BuddyApiService.instance.uploadChatDocument(
         fileBytes:      bytes,
         filename:       filename,
@@ -466,6 +485,14 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         caption:        caption.trim().isNotEmpty ? caption.trim() : null,
         conversationId: convId,
       );
+
+      debugPrint('[Upload] ✅ Success');
+      debugPrint('[Upload]   conversation_id     : ${apiResp.conversationId}');
+      debugPrint('[Upload]   assistant_message_id: ${apiResp.assistantMessageId}');
+      debugPrint('[Upload]   wallet_document_id  : ${apiResp.walletDocumentId}');
+      debugPrint('[Upload]   drive_file_id       : ${apiResp.driveFileId}');
+      debugPrint('[Upload]   web_view_link       : ${apiResp.webViewLink}');
+      debugPrint('[Upload]   suggested_actions   : ${apiResp.suggestedActions.length}');
 
       // Persist conversation ID
       if (apiResp.conversationId != convId) {
@@ -488,27 +515,46 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       }
 
       return apiResp.assistantContent;
+
     } on DioException catch (e) {
-      // Parse the error body to check for a known Drive error code
-      final data = e.response?.data;
+      // ── Full error diagnostics ─────────────────────────────────────────────
+      final statusCode  = e.response?.statusCode;
+      final rawData     = e.response?.data;
       String? errorCode;
-      if (data is Map) errorCode = data['error_code'] as String?;
+      String? detail;
+      if (rawData is Map) {
+        errorCode = rawData['error_code'] as String?;
+        detail    = rawData['detail']     as String?;
+      }
+
+      debugPrint('[Upload] ❌ DioException');
+      debugPrint('[Upload]   HTTP status : $statusCode');
+      debugPrint('[Upload]   error_code  : $errorCode');
+      debugPrint('[Upload]   detail      : $detail');
+      debugPrint('[Upload]   raw body    : $rawData');
+      debugPrint('[Upload]   dio message : ${e.message}');
 
       if (errorCode == 'drive_upload_failed') {
-        // Drive not connected — show a prompt but still allow AiService fallback
+        debugPrint('[Upload] ⚠ Drive scope missing — showing reconnect banner');
         _showDriveNotConnectedBanner();
+      } else {
+        debugPrint('[Upload] ↩ Unhandled error — falling back to AiService');
       }
-      // Any other error: silently fall back to AiService
       return null;
-    } catch (_) {
+
+    } catch (e, st) {
+      debugPrint('[Upload] ❌ Unexpected error: $e');
+      debugPrint('[Upload]   stacktrace: $st');
       return null;
     }
   }
 
-  /// Shows a persistent banner when Drive is not connected.
-  /// The user can tap "Connect" to go to Calendar & Email settings.
+  /// Shows a persistent banner when the Drive scope is missing.
+  /// This happens when Gmail was connected WITHOUT the drive.file scope —
+  /// the fix is to disconnect + reconnect Gmail (Buddy now requests Drive scope).
   void _showDriveNotConnectedBanner() {
     if (!mounted) return;
+    debugPrint('[Upload] 🔔 Showing Drive-scope-missing banner');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: const Color(0xFF1A0808),
@@ -516,7 +562,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12)),
-        duration: const Duration(seconds: 8),
+        duration: const Duration(seconds: 10),
         content: Row(
           children: [
             const Icon(Icons.drive_file_move_outlined,
@@ -524,7 +570,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Google Drive not connected. '
+                'Drive scope missing. Disconnect & reconnect Gmail to grant Drive access. '
                 'Connect it in Profile → Calendar & Email to save files.',
                 style: GoogleFonts.inter(
                     fontSize: 12, color: _white, height: 1.4),
@@ -1053,14 +1099,19 @@ Currency: AED. Context: Dubai, UAE.''';
 
   Future<void> _pickFromCamera() async {
     try {
+      debugPrint('[Attach] 📷 Opening camera picker');
       final xf = await ImagePicker().pickImage(
         source: ImageSource.camera,
         imageQuality: 90,
       );
-      if (xf == null || !mounted) return;
+      if (xf == null || !mounted) {
+        debugPrint('[Attach] 📷 Camera cancelled or widget unmounted');
+        return;
+      }
       final bytes = await xf.readAsBytes();
       final name  = xf.name.isNotEmpty ? xf.name
           : 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      debugPrint('[Attach] 📷 Camera image picked: $name (${bytes.length} bytes)');
       setState(() {
         _attachedFile = PlatformFile(
           name:  name,
@@ -1069,19 +1120,26 @@ Currency: AED. Context: Dubai, UAE.''';
           path:  kIsWeb ? null : xf.path,
         );
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Attach] 📷 Camera error: $e');
+    }
   }
 
   Future<void> _pickFromGallery() async {
     try {
+      debugPrint('[Attach] 🖼 Opening gallery picker');
       final xf = await ImagePicker().pickImage(
         source: ImageSource.gallery,
         imageQuality: 90,
       );
-      if (xf == null || !mounted) return;
+      if (xf == null || !mounted) {
+        debugPrint('[Attach] 🖼 Gallery cancelled or widget unmounted');
+        return;
+      }
       final bytes = await xf.readAsBytes();
       final name  = xf.name.isNotEmpty ? xf.name
           : 'image_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      debugPrint('[Attach] 🖼 Gallery image picked: $name (${bytes.length} bytes)');
       setState(() {
         _attachedFile = PlatformFile(
           name:  name,
@@ -1090,17 +1148,27 @@ Currency: AED. Context: Dubai, UAE.''';
           path:  kIsWeb ? null : xf.path,
         );
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Attach] 🖼 Gallery error: $e');
+    }
   }
 
   Future<void> _pickFromFiles() async {
     try {
+      debugPrint('[Attach] 📁 Opening file picker');
       final result = await FilePicker.platform.pickFiles(
           type: FileType.any, allowMultiple: false, withData: true);
       if (result != null && result.files.isNotEmpty && mounted) {
-        setState(() => _attachedFile = result.files.first);
+        final f = result.files.first;
+        debugPrint('[Attach] 📁 File picked: ${f.name} '
+            '(ext=${f.extension}, size=${f.size}, bytes=${f.bytes?.length})');
+        setState(() => _attachedFile = f);
+      } else {
+        debugPrint('[Attach] 📁 File picker cancelled');
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Attach] 📁 File picker error: $e');
+    }
   }
 
   String _mimeType(String? ext) {
