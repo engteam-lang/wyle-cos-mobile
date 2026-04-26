@@ -115,6 +115,6 @@ class ChatApiResponse {
         .map((e) => (e as num).toInt())
         .toList(),
     scheduleConflictAlternatives:
-        (j['schedule_conflict_alternatives'] as List? ?? []),
+        ((j['ai_meta'] as Map<String, dynamic>?)?['schedule_conflict_alternatives'] as List? ?? []),
   );
 }

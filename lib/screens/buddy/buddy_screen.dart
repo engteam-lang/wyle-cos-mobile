@@ -779,6 +779,17 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
     ref.read(appStateProvider.notifier).addObligations([ob]);
 
+    // Delete unchosen options from backend and local state
+    final pendingOptions = _pendingConflicts[messageId];
+    if (pendingOptions != null) {
+      for (final opt in pendingOptions) {
+        if (opt != chosen && opt.persistedId != null) {
+          BuddyApiService.instance.deleteActionItem(opt.persistedId!).catchError((_) {});
+          ref.read(appStateProvider.notifier).removeObligation('buddy_action_${opt.persistedId}');
+        }
+      }
+    }
+
     // Replace the conflict picker with a resolved confirmation message
     setState(() {
       _pendingConflicts.remove(messageId);
