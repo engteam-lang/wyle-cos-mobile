@@ -291,6 +291,15 @@ class BuddyApiService {
     return EmailSyncJobModel.fromJson(res.data as Map<String, dynamic>);
   }
 
+  /// POST /v1/integrations/google/calendar/sync
+  ///
+  /// Queues an incremental sync of the user's Google primary calendar into
+  /// Buddy action_items. Also runs automatically after a successful Gmail sync.
+  /// Returns a plain string confirmation from the backend.
+  Future<void> triggerGoogleCalendarSync() async {
+    await _dio.post('/integrations/google/calendar/sync');
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // Document upload (chat)
   // ══════════════════════════════════════════════════════════════════════════
