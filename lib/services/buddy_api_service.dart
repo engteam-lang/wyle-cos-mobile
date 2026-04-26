@@ -291,6 +291,44 @@ class BuddyApiService {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // Document upload (chat)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// POST /v1/chat/messages/upload  (multipart/form-data)
+  ///
+  /// Uploads [fileBytes] to the user's Google Drive, indexes it in the
+  /// document wallet, then runs Buddy's reply + suggested_actions pipeline
+  /// on the extracted text / vision.
+  ///
+  /// [filename]   — original filename (e.g. "invoice.pdf")
+  /// [mimeType]   — MIME type (e.g. "application/pdf", "image/jpeg")
+  /// [caption]    — optional user message shown alongside the file
+  /// [conversationId] — existing thread; null starts a new one
+  Future<ChatUploadResponse> uploadChatDocument({
+    required List<int>  fileBytes,
+    required String     filename,
+    required String     mimeType,
+    String?  caption,
+    int?     conversationId,
+  }) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        fileBytes,
+        filename: filename,
+        contentType: DioMediaType.parse(mimeType),
+      ),
+      if (caption        != null) 'caption':         caption,
+      if (conversationId != null) 'conversation_id': conversationId,
+    });
+
+    final res = await _uploadDio.post(
+      '/chat/messages/upload',
+      data: formData,
+    );
+    return ChatUploadResponse.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // Briefs
   // ══════════════════════════════════════════════════════════════════════════
 

@@ -123,3 +123,48 @@ class ChatApiResponse {
         ((j['ai_meta'] as Map<String, dynamic>?)?['task_list_clear_all'] as bool?) ?? false,
   );
 }
+
+// ── Response from POST /v1/chat/messages/upload ────────────────────────────────
+/// Extends the base chat response with Drive/Wallet metadata returned when a
+/// document is uploaded via the document-upload endpoint.
+class ChatUploadResponse extends ChatApiResponse {
+  /// ID of the newly created wallet document (null if Drive not connected).
+  final int?    walletDocumentId;
+  /// Google Drive file ID.
+  final String? driveFileId;
+  /// Public web-view URL for the Drive file.
+  final String? webViewLink;
+
+  const ChatUploadResponse({
+    required super.conversationId,
+    required super.userMessageId,
+    required super.assistantMessageId,
+    required super.assistantContent,
+    required super.suggestedActions,
+    required super.persistedActionItemIds,
+    super.completedActionItemIds,
+    super.scheduleConflictAlternatives,
+    super.taskListClearAll,
+    this.walletDocumentId,
+    this.driveFileId,
+    this.webViewLink,
+  });
+
+  factory ChatUploadResponse.fromJson(Map<String, dynamic> j) {
+    final base = ChatApiResponse.fromJson(j);
+    return ChatUploadResponse(
+      conversationId:           base.conversationId,
+      userMessageId:            base.userMessageId,
+      assistantMessageId:       base.assistantMessageId,
+      assistantContent:         base.assistantContent,
+      suggestedActions:         base.suggestedActions,
+      persistedActionItemIds:   base.persistedActionItemIds,
+      completedActionItemIds:   base.completedActionItemIds,
+      scheduleConflictAlternatives: base.scheduleConflictAlternatives,
+      taskListClearAll:         base.taskListClearAll,
+      walletDocumentId: (j['wallet_document_id'] as num?)?.toInt(),
+      driveFileId:       j['drive_file_id']  as String?,
+      webViewLink:       j['web_view_link']   as String?,
+    );
+  }
+}

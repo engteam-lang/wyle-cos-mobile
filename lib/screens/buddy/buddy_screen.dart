@@ -402,14 +402,17 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       String response;
 
       if (file?.bytes != null) {
-        // File attachments: always use AiService (vision-capable)
-        response = await AiService.instance.completeWithFile(
-          systemPrompt: _buildSystemPrompt(obligations),
-          userMessage: aiMessage,
-          fileBytes: file!.bytes!,
-          mimeType: _mimeType(file.extension),
-          maxTokens: 1500,
-        );
+        // File attachments: try the Buddy upload API first (saves to Drive +
+        // indexes in Document Wallet + runs AI pipeline).
+        // Falls back to AiService if Drive is not connected or the API fails.
+        response = await _sendViaUploadApi(file!, aiMessage)
+            ?? await AiService.instance.completeWithFile(
+                 systemPrompt: _buildSystemPrompt(obligations),
+                 userMessage:  aiMessage,
+                 fileBytes:    file!.bytes!,
+                 mimeType:     _mimeType(file.extension),
+                 maxTokens:    1500,
+               );
       } else {
         // Text messages: try Buddy API first, fall back to AiService
         response = await _sendViaBuddyApi(aiMessage)
@@ -431,9 +434,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       if (mounted) setState(() => _isSpeaking = false);
     } catch (e) {
       final errMsg = hasFile
-          ? "I couldn't analyse that file right now. Image and PDF analysis "
-            "requires Claude or Gemini. For plain text files, Groq works fine. "
-            "Please try again in a moment."
+          ? "Sorry, I couldn't process that file right now. Please try again."
           : "Sorry, I couldn't process that right now. Please check your "
             "connection and try again.";
       setState(() {
@@ -441,6 +442,86 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         _isProcessing = false;
       });
     }
+  }
+
+  /// Uploads [file] + [caption] to POST /v1/chat/messages/upload.
+  /// Handles suggested_actions and conflict detection exactly like
+  /// [_sendViaBuddyApi].  Returns the assistant reply, or null on failure
+  /// (caller falls back to AiService).
+  Future<String?> _sendViaUploadApi(PlatformFile file, String caption) async {
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) return null;
+
+    try {
+      final convId   = ref.read(appStateProvider).activeConversationId;
+      final mime     = _mimeType(file.extension);
+      final filename = file.name.isNotEmpty
+          ? file.name
+          : 'attachment.${file.extension ?? 'bin'}';
+
+      final apiResp = await BuddyApiService.instance.uploadChatDocument(
+        fileBytes:      bytes,
+        filename:       filename,
+        mimeType:       mime,
+        caption:        caption.trim().isNotEmpty ? caption.trim() : null,
+        conversationId: convId,
+      );
+
+      // Persist conversation ID
+      if (apiResp.conversationId != convId) {
+        await ref.read(appStateProvider.notifier)
+            .setActiveConversation(apiResp.conversationId);
+      }
+
+      // Suggested actions / conflict handling (same as text messages)
+      if (apiResp.suggestedActions.isNotEmpty) {
+        if (apiResp.scheduleConflictAlternatives.isNotEmpty) {
+          _queueConflictChoice(apiResp);
+        } else {
+          _processSuggestedActions(apiResp);
+        }
+      }
+
+      // Append a Drive-saved confirmation line if the backend returned a link
+      String reply = apiResp.assistantContent;
+      if (apiResp.webViewLink != null && apiResp.webViewLink!.isNotEmpty) {
+        _showDriveSnackbar(file.name, apiResp.webViewLink!);
+      }
+
+      return reply;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _showDriveSnackbar(String filename, String webViewLink) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: const Color(0xFF0A2A38),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 80, 10),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 5),
+        content: Row(
+          children: [
+            const Icon(Icons.drive_file_move_rounded,
+                color: _verdigris, size: 16),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '📁 Saved to Drive: $filename',
+                style: GoogleFonts.inter(
+                    fontSize: 12, color: _white,
+                    fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Sends the message to the Wyle backend (/v1/chat/messages).
