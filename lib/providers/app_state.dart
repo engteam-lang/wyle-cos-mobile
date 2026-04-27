@@ -256,19 +256,29 @@ class AppStateNotifier extends StateNotifier<AppState> {
     if (dateStr != null) {
       try {
         final parsed = DateTime.parse(dateStr);
-        final date = DateTime(parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute);
-        daysUntil = date.difference(DateTime.now()).inDays;
-        final h    = date.hour % 12 == 0 ? 12 : date.hour % 12;
-        final min  = date.minute.toString().padLeft(2, '0');
-        final ampm = date.hour < 12 ? 'AM' : 'PM';
+        final date = DateTime(parsed.year, parsed.month, parsed.day,
+            parsed.hour, parsed.minute);
+        final today = DateTime(DateTime.now().year, DateTime.now().month,
+            DateTime.now().day);
+        final itemDay = DateTime(date.year, date.month, date.day);
+        daysUntil = itemDay.difference(today).inDays;
+
         const months = [
           'Jan','Feb','Mar','Apr','May','Jun',
           'Jul','Aug','Sep','Oct','Nov','Dec',
         ];
-        final dayLabel = daysUntil == 0 ? 'Today'
-                       : daysUntil == 1 ? 'Tomorrow'
-                       : '${months[date.month - 1]} ${date.day}';
-        noteText = '$dayLabel at $h:$min $ampm';
+        final day   = date.day;
+        final month = months[date.month - 1];
+        final year  = date.year != DateTime.now().year ? ' ${date.year}' : '';
+
+        // Always show the exact date — never vague labels like "Today"/"Tomorrow"
+        final hasTime = date.hour != 0 || date.minute != 0;
+        final h    = date.hour % 12 == 0 ? 12 : date.hour % 12;
+        final min  = date.minute.toString().padLeft(2, '0');
+        final ampm = date.hour < 12 ? 'AM' : 'PM';
+        final time = hasTime ? ' at $h:$min $ampm' : '';
+
+        noteText = '$month $day$year$time';    // e.g. "Mar 22 2026, 8:30 AM"
       } catch (_) {}
     }
 

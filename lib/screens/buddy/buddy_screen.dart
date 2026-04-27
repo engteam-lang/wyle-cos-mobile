@@ -793,27 +793,29 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       // starts_at is null for "task" kind items.
       final dateIso = action.startsAt ?? action.remindAt;
 
-      // Calculate daysUntil and build a human-readable "starts at" note
+      // Calculate daysUntil and build exact date+time note (no relative labels)
       int daysUntil = 1;
       String? noteText;
       if (dateIso != null) {
         try {
-          final parsed = DateTime.parse(dateIso);
-          final start = DateTime(parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute);
-          final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+          final parsed  = DateTime.parse(dateIso);
+          final start   = DateTime(parsed.year, parsed.month, parsed.day,
+              parsed.hour, parsed.minute);
+          final today   = DateTime(DateTime.now().year, DateTime.now().month,
+              DateTime.now().day);
           final itemDay = DateTime(start.year, start.month, start.day);
           daysUntil = itemDay.difference(today).inDays;
-          final h    = start.hour % 12 == 0 ? 12 : start.hour % 12;
-          final min  = start.minute.toString().padLeft(2, '0');
-          final ampm = start.hour < 12 ? 'AM' : 'PM';
           const months = [
             'Jan','Feb','Mar','Apr','May','Jun',
             'Jul','Aug','Sep','Oct','Nov','Dec',
           ];
-          final day = daysUntil == 0 ? 'Today'
-                    : daysUntil == 1 ? 'Tomorrow'
-                    : '${months[start.month - 1]} ${start.day}';
-          noteText = '$day at $h:$min $ampm';
+          final year    = start.year != DateTime.now().year ? ' ${start.year}' : '';
+          final hasTime = start.hour != 0 || start.minute != 0;
+          final h    = start.hour % 12 == 0 ? 12 : start.hour % 12;
+          final min  = start.minute.toString().padLeft(2, '0');
+          final ampm = start.hour < 12 ? 'AM' : 'PM';
+          final time = hasTime ? ' at $h:$min $ampm' : '';
+          noteText = '${months[start.month - 1]} ${start.day}$year$time';
         } catch (_) {}
       }
 
@@ -3074,43 +3076,46 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
   }
 
   /// Formats the time label for a task card.
-  /// Prefers [startsAt] (ISO-8601) for a human-readable date+time string,
-  /// falling back to daysUntil-based labels for legacy / API items.
+  /// Always returns the exact date + time (e.g. "Mar 22, 8:30 AM").
+  /// Never returns vague relative labels like "Overdue", "Today", "Tomorrow".
+  /// Priority: starts_at → remind_at → daysUntil fallback.
   String _formatTaskTime(ObligationModel o) {
-    if (o.startsAt != null) {
+    // Try starts_at first, then notes (which already contains a formatted date)
+    final rawIso = o.startsAt ?? o.remindAt;
+    if (rawIso != null) {
       try {
-        // The API currently returns local times in UTC format (e.g. 17:00Z for 5 PM).
-        // We extract the nominal hour/minute and force it to be local.
-        final parsed  = DateTime.parse(o.startsAt!);
-        final dt      = DateTime(parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute);
-        final now     = DateTime.now();
-        final today   = DateTime(now.year, now.month, now.day);
-        final itemDay = DateTime(dt.year, dt.month, dt.day);
-        final diff    = itemDay.difference(today).inDays;
-
-        // Build time portion only when the time isn't midnight exactly
-        final hasTime  = dt.hour != 0 || dt.minute != 0;
-        final h        = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-        final min      = dt.minute.toString().padLeft(2, '0');
-        final ampm     = dt.hour < 12 ? 'AM' : 'PM';
-        final timePart = hasTime ? ', $h:$min $ampm' : '';
-
-        if (diff < 0)  return 'Overdue';
-        if (diff == 0) return 'Today$timePart';
-        if (diff == 1) return 'Tomorrow$timePart';
+        final parsed = DateTime.parse(rawIso);
+        // Treat the timestamp as local (backend sends nominal local times)
+        final dt = DateTime(parsed.year, parsed.month, parsed.day,
+            parsed.hour, parsed.minute);
 
         const months = [
           'Jan','Feb','Mar','Apr','May','Jun',
           'Jul','Aug','Sep','Oct','Nov','Dec',
         ];
-        final year = dt.year != now.year ? ' ${dt.year}' : '';
-        return '${dt.day} ${months[dt.month - 1]}$year$timePart';
+
+        final day   = dt.day;
+        final month = months[dt.month - 1];
+        final year  = dt.year != DateTime.now().year ? ' ${dt.year}' : '';
+
+        // Always include the time when it isn't exactly midnight
+        final hasTime = dt.hour != 0 || dt.minute != 0;
+        final h    = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+        final min  = dt.minute.toString().padLeft(2, '0');
+        final ampm = dt.hour < 12 ? 'AM' : 'PM';
+        final time = hasTime ? ', $h:$min $ampm' : '';
+
+        return '$month $day$year$time';          // e.g. "Mar 22, 8:30 AM"
       } catch (_) {}
     }
-    // Fallback to daysUntil
-    if (o.daysUntil == 0) return 'Due today';
-    if (o.daysUntil < 0)  return 'Overdue';
-    return '${o.daysUntil}d';
+
+    // ob.notes is pre-formatted by _actionItemToObligation — use it if present
+    if (o.notes != null && o.notes!.isNotEmpty) return o.notes!;
+
+    // Last resort: plain day count (should rarely reach here)
+    if (o.daysUntil == 0) return 'Today';
+    if (o.daysUntil < 0)  return '${o.daysUntil.abs()}d ago';
+    return 'in ${o.daysUntil}d';
   }
 
   Widget _taskCard(ObligationModel o, {required bool isUrgent}) {
