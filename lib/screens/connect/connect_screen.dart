@@ -119,6 +119,10 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
 
                           // ── Sign out ───────────────────────────────────────
                           _buildSignOut(context),
+                          const SizedBox(height: 10),
+
+                          // ── Delete account ─────────────────────────────────
+                          _buildDeleteAccount(context),
                           const SizedBox(height: 8),
                         ],
                       ),
@@ -321,6 +325,35 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
     );
   }
 
+  // ── Delete Account ─────────────────────────────────────────────────────────
+  Widget _buildDeleteAccount(BuildContext context) {
+    return GestureDetector(
+      onTap: () => _confirmDeleteAccount(context),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF5C1A1A).withOpacity(0.5)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.delete_forever_rounded,
+                color: Color(0xFFFF3B30), size: 18),
+            const SizedBox(width: 8),
+            Text('Delete Account',
+                style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFFFF3B30).withOpacity(0.8))),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDivider() {
     return Container(
         height: 1, color: kProfileBorder.withOpacity(0.5));
@@ -356,6 +389,37 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
                     fontWeight: FontWeight.w600)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _confirmDeleteAccount(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _DeleteAccountDialog(
+        onConfirm: () async {
+          try {
+            await ref.read(appStateProvider.notifier).deleteAccount();
+            if (mounted) context.go(AppRoutes.login);
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: const Color(0xFF3B0A0A),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  content: Text(
+                    'Could not delete account. Please try again.',
+                    style: GoogleFonts.poppins(
+                        fontSize: 13, color: Colors.white),
+                  ),
+                ),
+              );
+            }
+          }
+        },
       ),
     );
   }
@@ -427,4 +491,121 @@ class _ProfileSection {
   final VoidCallback? onTap;
   const _ProfileSection({
     required this.label, required this.iconBg, required this.icon, this.onTap});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Delete Account confirmation dialog
+// Stateful so it can show a loading spinner while the API call is in-flight.
+// ─────────────────────────────────────────────────────────────────────────────
+class _DeleteAccountDialog extends StatefulWidget {
+  final Future<void> Function() onConfirm;
+  const _DeleteAccountDialog({required this.onConfirm});
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  bool _deleting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: const Color(0xFF1A0808),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      icon: const Icon(Icons.delete_forever_rounded,
+          color: Color(0xFFFF3B30), size: 36),
+      title: Text(
+        'Delete Account',
+        textAlign: TextAlign.center,
+        style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w700,
+            fontSize: 18,
+            color: Colors.white),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'This will permanently delete all your data and cannot be undone.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+                fontSize: 13,
+                color: const Color(0xFFFFB3B3),
+                height: 1.5),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Your chat history, tasks, preferences, calendar sync, and all '
+            'connected accounts will be erased forever.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: const Color(0xFF9A7A7A),
+                height: 1.5),
+          ),
+        ],
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      actions: _deleting
+          ? [
+              const SizedBox(
+                height: 36,
+                child: Center(
+                  child: SizedBox(
+                    width: 24, height: 24,
+                    child: CircularProgressIndicator(
+                        color: Color(0xFFFF3B30), strokeWidth: 2.5),
+                  ),
+                ),
+              ),
+            ]
+          : [
+              // Cancel
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: const BorderSide(color: Color(0xFF3A3A3A))),
+                  ),
+                  child: Text('Cancel',
+                      style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: const Color(0xFF9CA3AF))),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Confirm delete
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    setState(() => _deleting = true);
+                    Navigator.pop(context);
+                    await widget.onConfirm();
+                  },
+                  icon: const Icon(Icons.delete_forever_rounded,
+                      size: 16, color: Colors.white),
+                  label: Text('Yes, Delete Everything',
+                      style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF3B30),
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ],
+    );
+  }
 }

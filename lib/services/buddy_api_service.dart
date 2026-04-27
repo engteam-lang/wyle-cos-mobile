@@ -122,6 +122,22 @@ class BuddyApiService {
     }
   }
 
+  /// POST /v1/users/me/delete-data   { "confirm": true }
+  ///
+  /// Permanently deletes the user and ALL data that belongs to them:
+  /// chat history, action items, preferences, AI memory, mail sync state,
+  /// OAuth links, etc.  This is irreversible.
+  ///
+  /// [confirm] must be true — the backend rejects the request if false.
+  ///
+  /// Returns { "ok": true, "deleted_user_public_id": "...", ... }
+  Future<Map<String, dynamic>> deleteMyData({bool confirm = true}) async {
+    final res = await _dio.post('/users/me/delete-data', data: {
+      'confirm': confirm,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
   /// POST /v1/users/me/device — register FCM token after login
   /// [platform] is 'android' or 'ios'
   Future<void> registerDevice({

@@ -138,6 +138,22 @@ class AppStateNotifier extends StateNotifier<AppState> {
     loadObligationsFromApi();
   }
 
+  /// Permanently deletes the account server-side then clears all local state.
+  /// Throws if the API call fails (caller should show an error to the user).
+  Future<void> deleteAccount() async {
+    // Call the API while the token is still present so the request is auth'd.
+    final result = await BuddyApiService.instance.deleteMyData(confirm: true);
+    debugPrint('[DeleteAccount] server response: $result');
+
+    // Clear all local state exactly like a logout.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(AppConstants.keyAuthToken);
+    await prefs.remove(AppConstants.keyUser);
+    await prefs.remove(AppConstants.keyGoogleAccounts);
+    await prefs.remove(AppConstants.keyOutlookAccounts);
+    state = const AppState();
+  }
+
   Future<void> logout() async {
     // ── 1. Notify the server FIRST (while we still have the token) ────────────
     // This removes server-side OAuth credentials, stops background sync, and
