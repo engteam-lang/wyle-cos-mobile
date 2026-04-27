@@ -39,6 +39,7 @@ dependencies:
 
   # UI / Fonts
   google_fonts: ^6.2.1
+  flutter_markdown: ^0.7.4
 
   # Utilities
   intl: ^0.19.0

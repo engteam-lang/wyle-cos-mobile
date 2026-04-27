@@ -13,6 +13,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'dart:io' show Platform;
 
 import '../../models/chat_message_model.dart';
@@ -1452,9 +1453,34 @@ Currency: AED. Context: Dubai, UAE.''';
                 border: isUser ? null
                     : Border.all(color: _verdigris.withOpacity(0.3)),
               ),
-              child: Text(msg.content,
-                  style: GoogleFonts.inter(
-                      fontSize: 14, color: _white, height: 1.55)),
+              child: isUser
+                  ? Text(msg.content,
+                      style: GoogleFonts.inter(
+                          fontSize: 14, color: _white, height: 1.55))
+                  : MarkdownBody(
+                      data: msg.content,
+                      styleSheet: MarkdownStyleSheet(
+                        p: GoogleFonts.inter(
+                            fontSize: 14, color: _white, height: 1.55),
+                        strong: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: _white,
+                            height: 1.55,
+                            fontWeight: FontWeight.w700),
+                        em: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: _white,
+                            height: 1.55,
+                            fontStyle: FontStyle.italic),
+                        listBullet: GoogleFonts.inter(
+                            fontSize: 14, color: _white, height: 1.55),
+                        orderedListAlign: WrapAlignment.start,
+                        blockSpacing: 6,
+                        pPadding: EdgeInsets.zero,
+                      ),
+                      shrinkWrap: true,
+                      softLineBreak: true,
+                    ),
             ),
           ),
           if (isUser) const SizedBox(width: 8),
@@ -1498,9 +1524,30 @@ Currency: AED. Context: Dubai, UAE.''';
                     ),
                     border: Border.all(color: _verdigris.withOpacity(0.3)),
                   ),
-                  child: Text(msg.content,
-                      style: GoogleFonts.inter(
-                          fontSize: 14, color: _white, height: 1.55)),
+                  child: MarkdownBody(
+                      data: msg.content,
+                      styleSheet: MarkdownStyleSheet(
+                        p: GoogleFonts.inter(
+                            fontSize: 14, color: _white, height: 1.55),
+                        strong: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: _white,
+                            height: 1.55,
+                            fontWeight: FontWeight.w700),
+                        em: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: _white,
+                            height: 1.55,
+                            fontStyle: FontStyle.italic),
+                        listBullet: GoogleFonts.inter(
+                            fontSize: 14, color: _white, height: 1.55),
+                        orderedListAlign: WrapAlignment.start,
+                        blockSpacing: 6,
+                        pPadding: EdgeInsets.zero,
+                      ),
+                      shrinkWrap: true,
+                      softLineBreak: true,
+                    ),
                 ),
                 const SizedBox(height: 10),
                 // Conflict label
