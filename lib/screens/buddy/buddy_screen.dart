@@ -39,7 +39,10 @@ const _crimson    = Color(0xFFFF3B30);
 const _white      = Color(0xFFFFFFFF);
 const _textSec    = Color(0xFF9A9A9A);
 const _textTer    = Color(0xFF4A4A4A);
-const _alertBg    = Color(0xFF1A0808);
+// Brand-aligned alert colours — Fervor (#D7263D) is Wyle's "Critical State"
+// per the brand guidelines: warnings, urgency, high-stakes interventions.
+const _fervor     = Color(0xFFD7263D);   // Fervor — full brand red
+const _alertBg    = Color(0xFF290A0E);   // Fervor darkest shade (bg-safe ~16%)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Scheduling-conflict option
@@ -1394,14 +1397,14 @@ Currency: AED. Context: Dubai, UAE.''';
       decoration: BoxDecoration(
         color: _alertBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _crimson.withOpacity(0.5)),
+        border: Border.all(color: _fervor.withOpacity(0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: _crimson, size: 16),
+              Icon(Icons.warning_amber_rounded, color: _fervor, size: 16),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1432,7 +1435,7 @@ Currency: AED. Context: Dubai, UAE.''';
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: _crimson,
+                color: _fervor,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text('View Task',
