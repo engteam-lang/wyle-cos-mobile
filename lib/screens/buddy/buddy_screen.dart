@@ -3080,8 +3080,9 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
   /// Never returns vague relative labels like "Overdue", "Today", "Tomorrow".
   /// Priority: starts_at → remind_at → daysUntil fallback.
   String _formatTaskTime(ObligationModel o) {
-    // Try starts_at first, then notes (which already contains a formatted date)
-    final rawIso = o.startsAt ?? o.remindAt;
+    // ObligationModel only carries startsAt (remind_at lives on ActionItemModel).
+    // ob.notes is pre-formatted by _actionItemToObligation as the fallback.
+    final rawIso = o.startsAt;
     if (rawIso != null) {
       try {
         final parsed = DateTime.parse(rawIso);
