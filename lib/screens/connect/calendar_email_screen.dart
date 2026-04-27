@@ -80,38 +80,12 @@ class _CalendarEmailScreenState extends ConsumerState<CalendarEmailScreen>
             begin: const Offset(0, 0.05), end: Offset.zero)
         .animate(CurvedAnimation(parent: _enterCtrl, curve: Curves.easeOut));
 
-    // ── Diagnostic: dump server-side account state on every screen open ───────
-    _debugDumpServerAccountState();
-  }
-
-  /// Calls GET /v1/users/me and logs the full response including linked_accounts.
-  /// This runs every time Calendar & Email is opened so we can see exactly
-  /// what the backend knows about this user's connected accounts and scopes.
-  Future<void> _debugDumpServerAccountState() async {
-    try {
-      debugPrint('[AccountState] ▶ Fetching /v1/users/me for diagnostics…');
-      final me = await BuddyApiService.instance.getMe();
-      debugPrint('[AccountState] Full /v1/users/me response:');
-      debugPrint('[AccountState]   $me');
-      final linked = me['linked_accounts'] as List? ?? [];
-      debugPrint('[AccountState] linked_accounts (${linked.length} entries):');
-      for (var i = 0; i < linked.length; i++) {
-        debugPrint('[AccountState]   [$i] ${linked[i]}');
-      }
-      // Check for drive scope specifically
-      final hasGoogleDrive = linked.any((a) {
-        final m = a as Map<String, dynamic>;
-        final provider = (m['provider'] as String? ?? '').toLowerCase();
-        final scopes   = (m['scopes'] as List? ?? []).cast<String>();
-        final scopeStr = (m['scope'] as String? ?? '');
-        return provider == 'google' &&
-            (scopes.any((s) => s.contains('drive')) ||
-             scopeStr.contains('drive'));
-      });
-      debugPrint('[AccountState] Has Google Drive scope: $hasGoogleDrive');
-    } catch (e) {
-      debugPrint('[AccountState] ❌ getMe() diagnostic failed: $e');
-    }
+    // ── Refresh connected accounts from server on every screen open ──────────
+    // This keeps googleConnected / outlookConnected accurate after a web page
+    // refresh or app restart where SharedPreferences may have been cleared.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(appStateProvider.notifier).refreshLinkedAccountsFromServer();
+    });
   }
 
   @override

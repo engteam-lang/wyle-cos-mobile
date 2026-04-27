@@ -352,6 +352,48 @@ class AppStateNotifier extends StateNotifier<AppState> {
     );
   }
 
+  /// Calls GET /v1/users/me and syncs the server's linked_accounts into
+  /// local state + SharedPreferences.
+  ///
+  /// Call this whenever the Calendar & Email screen opens so that
+  /// googleConnected / outlookConnected stay accurate even after a page
+  /// refresh (web) or app restart where SharedPreferences was cleared.
+  Future<void> refreshLinkedAccountsFromServer() async {
+    if (state.token == null) return;
+    try {
+      final me = await BuddyApiService.instance.getMe();
+      final linked = me['linked_accounts'] as List? ?? [];
+
+      final googleEmails  = <String>[];
+      final outlookEmails = <String>[];
+
+      for (final acct in linked) {
+        final m        = acct as Map<String, dynamic>;
+        final provider = (m['provider'] as String? ?? '').toLowerCase();
+        final email    = (m['email']    as String? ??
+                          m['account_email'] as String? ?? '');
+        if (email.isEmpty) continue;
+        if (provider == 'google')                           googleEmails.add(email);
+        if (provider == 'microsoft' || provider == 'outlook') outlookEmails.add(email);
+      }
+
+      // Update Google accounts if server has more/different data
+      if (googleEmails.isNotEmpty || state.googleAccounts.isEmpty) {
+        await setGoogleAccounts(googleEmails);
+      }
+      // Update Outlook accounts
+      if (outlookEmails.isNotEmpty || state.outlookAccounts.isEmpty) {
+        await _persistOutlookAccounts(outlookEmails);
+        state = state.copyWith(outlookAccounts: outlookEmails);
+      }
+
+      debugPrint('[AccountRefresh] google: $googleEmails  outlook: $outlookEmails');
+    } catch (e) {
+      debugPrint('[AccountRefresh] getMe() failed — keeping cached state: $e');
+      // Silent fail — cached state from SharedPreferences is still shown
+    }
+  }
+
   Future<void> _persistGoogleAccounts(List<String> accounts) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(AppConstants.keyGoogleAccounts, jsonEncode(accounts));
