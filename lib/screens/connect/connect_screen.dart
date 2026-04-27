@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../navigation/app_router.dart';
 import '../../providers/app_state.dart';
+import '../buddy/buddy_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared palette used by every profile sub-screen
@@ -380,6 +381,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
+              BuddyScreen.resetSessionState();
               await ref.read(appStateProvider.notifier).logout();
               if (mounted) context.go(AppRoutes.login);
             },
@@ -401,6 +403,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen>
         onConfirm: () async {
           try {
             await ref.read(appStateProvider.notifier).deleteAccount();
+            BuddyScreen.resetSessionState();
             if (mounted) context.go(AppRoutes.login);
           } catch (e) {
             if (mounted) {

@@ -104,6 +104,12 @@ ObligationModel? _findObligationInUtterance(
 class BuddyScreen extends ConsumerStatefulWidget {
   const BuddyScreen({super.key});
 
+  /// Resets per-session UI state. Call this on logout so the alert banner
+  /// appears again when the user logs back in.
+  static void resetSessionState() {
+    _BuddyScreenState._alertDismissedOnce = false;
+  }
+
   @override
   ConsumerState<BuddyScreen> createState() => _BuddyScreenState();
 }
@@ -113,6 +119,11 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
   static const _kChatMessages = 'wyle_buddy_messages';
   static const _kChatDate     = 'wyle_buddy_date';
+
+  /// True once the urgent-task alert card has been dismissed.
+  /// Declared static so it survives GoRouter navigation rebuilds within the
+  /// same app session, but resets to false on every fresh app launch / login.
+  static bool _alertDismissedOnce = false;
 
   final List<ChatMessageModel> _messages   = [];
   final TextEditingController  _textCtrl   = TextEditingController();
@@ -124,8 +135,6 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   bool           _isBrainDumpProcessing = false; // uploading/polling after stop
   String         _partialText          = '';
   PlatformFile?  _attachedFile;
-  bool           _alertDismissed = false;
-
   /// Keyed by message ID → list of conflict options waiting for the user to pick.
   /// When the user selects an option the entry is removed and the task is created.
   final Map<String, List<_ConflictOption>> _pendingConflicts = {};
@@ -1232,7 +1241,7 @@ Currency: AED. Context: Dubai, UAE.''';
                 children: [
                   _buildHeader(context),
                   // Alert card for most urgent obligation
-                  if (urgentOb != null && !_alertDismissed &&
+                  if (urgentOb != null && !_alertDismissedOnce &&
                       urgentOb.daysUntil <= 1)
                     _buildAlertCard(urgentOb),
                   Expanded(
@@ -1360,7 +1369,7 @@ Currency: AED. Context: Dubai, UAE.''';
                 ),
               ),
               GestureDetector(
-                onTap: () => setState(() => _alertDismissed = true),
+                onTap: () => setState(() => _alertDismissedOnce = true),
                 child: const Icon(Icons.close_rounded,
                     color: _textSec, size: 18),
               ),
