@@ -1,3 +1,39 @@
+// ── Location context sent with every chat message ─────────────────────────────
+/// Matches the `location` object in POST /v1/chat/messages.
+/// All fields are optional — send what you have, omit the rest.
+class LocationPayload {
+  final double?  latitude;
+  final double?  longitude;
+  final double?  accuracyMeters;
+  final String?  city;
+  final String?  region;
+  final String?  country;
+  final String?  timezone;
+  final String?  label;
+
+  const LocationPayload({
+    this.latitude,
+    this.longitude,
+    this.accuracyMeters,
+    this.city,
+    this.region,
+    this.country,
+    this.timezone,
+    this.label,
+  });
+
+  Map<String, dynamic> toJson() => {
+    if (latitude       != null) 'latitude':        latitude,
+    if (longitude      != null) 'longitude':       longitude,
+    if (accuracyMeters != null) 'accuracy_meters': accuracyMeters,
+    if (city           != null) 'city':            city,
+    if (region         != null) 'region':          region,
+    if (country        != null) 'country':         country,
+    if (timezone       != null) 'timezone':        timezone,
+    if (label          != null) 'label':           label,
+  };
+}
+
 /// Conversation thread returned by GET /v1/chat/conversations
 class ConversationModel {
   final int     id;

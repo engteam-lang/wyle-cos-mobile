@@ -14,6 +14,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:geolocator/geolocator.dart';
 import 'dart:io' show Platform;
 
 import '../../models/chat_message_model.dart';
@@ -656,6 +657,48 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     );
   }
 
+  // ── Location helper ───────────────────────────────────────────────────────
+
+  /// Builds a [LocationPayload] to attach to every chat message.
+  ///
+  /// Always includes the device timezone (no permissions needed).
+  /// GPS coordinates are added silently **only** when the user has already
+  /// granted location permission — no permission dialog is ever shown here.
+  Future<LocationPayload> _buildLocationPayload() async {
+    // Timezone: e.g. "GST", "+04:00" — always available
+    final tz = DateTime.now().timeZoneName;
+
+    double? lat, lon, accuracy;
+
+    // GPS: only use existing permission — never prompt from here
+    try {
+      if (!kIsWeb) {
+        final perm = await Geolocator.checkPermission();
+        if (perm == LocationPermission.always ||
+            perm == LocationPermission.whileInUse) {
+          final pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.low,  // fast, battery-friendly
+              timeLimit: Duration(seconds: 5),
+            ),
+          );
+          lat      = pos.latitude;
+          lon      = pos.longitude;
+          accuracy = pos.accuracy;
+        }
+      }
+    } catch (_) {
+      // GPS unavailable or timed out — continue without it
+    }
+
+    return LocationPayload(
+      latitude:       lat,
+      longitude:      lon,
+      accuracyMeters: accuracy,
+      timezone:       tz,
+    );
+  }
+
   /// Sends the message to the Wyle backend (/v1/chat/messages).
   /// Returns the assistant reply string, or null if the call fails
   /// (in which case the caller falls back to AiService).
@@ -670,10 +713,12 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         : null;
 
     try {
-      final convId = ref.read(appStateProvider).activeConversationId;
-      final apiResp = await BuddyApiService.instance.sendMessage(
+      final convId   = ref.read(appStateProvider).activeConversationId;
+      final location = await _buildLocationPayload();
+      final apiResp  = await BuddyApiService.instance.sendMessage(
         content:        content,
         conversationId: convId,
+        location:       location,
       );
 
       // Persist the conversation id so follow-up messages stay in the same thread

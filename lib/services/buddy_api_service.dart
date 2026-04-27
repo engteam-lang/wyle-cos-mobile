@@ -180,13 +180,16 @@ class BuddyApiService {
 
   /// POST /v1/chat/messages
   /// Pass [conversationId] = null to use latest/default thread.
+  /// Pass [location] to give Buddy geographic context (city, timezone, GPS).
   Future<ChatApiResponse> sendMessage({
     required String content,
-    int? conversationId,
+    int?            conversationId,
+    LocationPayload? location,
   }) async {
     final res = await _chatDio.post('/chat/messages', data: {
       'content':         content,
       'conversation_id': conversationId,
+      if (location != null) 'location': location.toJson(),
     });
     return ChatApiResponse.fromJson(res.data as Map<String, dynamic>);
   }
