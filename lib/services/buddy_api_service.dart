@@ -103,6 +103,25 @@ class BuddyApiService {
     }
   }
 
+  /// POST /v1/users/me/logout
+  ///
+  /// Removes server-side OAuth credentials (Google & Microsoft link rows),
+  /// cancels pending mail/outbox jobs, and revokes WhatsApp Business tokens.
+  /// Call this BEFORE dropping the local JWT so the backend can still
+  /// authenticate the request.
+  ///
+  /// Returns { "ok": true, "removed_oauth_accounts": N, ... }
+  /// Silently ignores network errors — local state is cleared regardless.
+  Future<Map<String, dynamic>> serverLogout() async {
+    try {
+      final res = await _dio.post('/users/me/logout');
+      return res.data as Map<String, dynamic>;
+    } catch (_) {
+      // Best-effort — if the request fails the app still signs out locally.
+      return {'ok': false};
+    }
+  }
+
   /// POST /v1/users/me/device — register FCM token after login
   /// [platform] is 'android' or 'ios'
   Future<void> registerDevice({

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/obligation_model.dart';
@@ -138,9 +139,19 @@ class AppStateNotifier extends StateNotifier<AppState> {
   }
 
   Future<void> logout() async {
+    // ── 1. Notify the server FIRST (while we still have the token) ────────────
+    // This removes server-side OAuth credentials, stops background sync, and
+    // revokes stored Google / Microsoft refresh tokens.
+    // The call is fire-and-forget — local sign-out proceeds even if it fails.
+    final result = await BuddyApiService.instance.serverLogout();
+    debugPrint('[Logout] server response: $result');
+
+    // ── 2. Clear local state ──────────────────────────────────────────────────
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(AppConstants.keyAuthToken);
     await prefs.remove(AppConstants.keyUser);
+    await prefs.remove(AppConstants.keyGoogleAccounts);
+    await prefs.remove(AppConstants.keyOutlookAccounts);
     state = const AppState();
   }
 
