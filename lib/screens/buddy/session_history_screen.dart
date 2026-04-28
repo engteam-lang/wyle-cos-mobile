@@ -17,14 +17,21 @@ const _textSec   = Color(0xFF9A9A9A);
 // ── A day-session: all messages from one calendar day ─────────────────────────
 class _DaySession {
   final DateTime date;           // midnight of the day (local)
+  final String? fallbackTitle;
   final List<ConversationMessageModel> messages;
 
-  const _DaySession({required this.date, required this.messages});
+  const _DaySession({required this.date, this.fallbackTitle, required this.messages});
 
   int get messageCount => messages.length;
 
-  /// User-visible label: "Today", "Yesterday", or "Apr 22, 2026"
+  /// User-visible label: "Today", "Yesterday", "Apr 22, 2026", or Conversation Title
   String get dateLabel {
+    if (date.year == 1970) {
+      if (fallbackTitle != null && fallbackTitle!.isNotEmpty) {
+        return fallbackTitle!;
+      }
+      return 'Session';
+    }
     final now   = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final diff  = today.difference(date).inDays;
@@ -35,6 +42,16 @@ class _DaySession {
       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  String get detailTitle {
+    if (date.year == 1970) {
+      if (fallbackTitle != null && fallbackTitle!.isNotEmpty) {
+        return fallbackTitle!;
+      }
+      return 'Session';
+    }
+    return "$dateLabel's Session";
   }
 
   /// Time range: "9:30 AM – 11:45 AM"
@@ -105,42 +122,49 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
               .catchError((_) => <ConversationMessageModel>[]));
       final allMessages = await Future.wait(msgFutures);
 
-      // 3. Flatten every message, then group by calendar day
-      final flat = allMessages.expand((msgs) => msgs).toList();
+      // 3. Group messages with dates by day, and keep track of dateless messages by conversation
       final Map<DateTime, List<ConversationMessageModel>> byDay = {};
+      final List<_DaySession> unknownSessions = [];
 
-      for (final msg in flat) {
-        DateTime dayKey;
-        if (msg.createdAt != null) {
-          try {
-            final dt = DateTime.parse(msg.createdAt!).toLocal();
-            dayKey = DateTime(dt.year, dt.month, dt.day);
-          } catch (_) {
-            dayKey = DateTime(1970); // unknown date bucket
+      for (int i = 0; i < limited.length; i++) {
+        final c = limited[i];
+        final msgs = allMessages[i];
+        final List<ConversationMessageModel> unknownDateMsgs = [];
+
+        for (final msg in msgs) {
+          DateTime? dayKey;
+          if (msg.createdAt != null) {
+            try {
+              final dt = DateTime.parse(msg.createdAt!).toLocal();
+              dayKey = DateTime(dt.year, dt.month, dt.day);
+            } catch (_) {}
           }
-        } else {
-          dayKey = DateTime(1970);
+          
+          if (dayKey != null) {
+            byDay.putIfAbsent(dayKey, () => []).add(msg);
+          } else {
+            unknownDateMsgs.add(msg);
+          }
         }
-        byDay.putIfAbsent(dayKey, () => []).add(msg);
+
+        if (unknownDateMsgs.isNotEmpty) {
+          unknownSessions.add(_DaySession(
+            date: DateTime(1970),
+            fallbackTitle: c.title,
+            messages: List.unmodifiable(unknownDateMsgs),
+          ));
+        }
       }
 
-      // 4. Sort days newest-first; discard the unknown-date bucket if empty
-      final days = byDay.keys
-          .where((d) => d.year != 1970 || (byDay[d]?.isNotEmpty ?? false))
-          .toList()
-        ..sort((a, b) => b.compareTo(a));
-
-      // If all messages lacked timestamps, fall back to one "All messages" session
-      if (days.isEmpty && flat.isNotEmpty) {
-        final fallback = _DaySession(date: DateTime(1970), messages: flat);
-        if (mounted) setState(() { _sessions = [fallback]; _loading = false; });
-        return;
-      }
-
-      final sessions = days.map((d) => _DaySession(
-        date:     d,
+      // 4. Sort days newest-first, then append unknown sessions
+      final days = byDay.keys.toList()..sort((a, b) => b.compareTo(a));
+      
+      final List<_DaySession> sessions = days.map((d) => _DaySession(
+        date: d,
         messages: List.unmodifiable(byDay[d]!),
       )).toList();
+      
+      sessions.addAll(unknownSessions);
 
       if (mounted) setState(() { _sessions = sessions; _loading = false; });
     } catch (e) {
@@ -484,7 +508,7 @@ class _DaySessionDetailSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${session.dateLabel}\'s Session',
+                        session.detailTitle,
                         style: GoogleFonts.poppins(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
