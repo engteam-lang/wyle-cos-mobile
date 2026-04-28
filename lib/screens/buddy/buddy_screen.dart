@@ -15,7 +15,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:geolocator/geolocator.dart';
-import 'dart:io' show Platform;
+import 'dart:io' show File, Platform;
 
 import '../../models/chat_message_model.dart';
 import '../../models/conversation_model.dart';
@@ -448,25 +448,47 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       final obligations = ref.read(activeObligationsProvider);
       String response;
 
-      if (file?.bytes != null) {
+      // On web  : file.bytes is always pre-loaded by the browser.
+      // On mobile: file_picker may return only a path (especially on Android
+      //            scoped storage). We accept either bytes OR a valid path.
+      final hasMobileFile = !kIsWeb && file?.path != null;
+      if (file?.bytes != null || hasMobileFile) {
         // File attachments: try the Buddy upload API first (saves to Drive +
         // indexes in Document Wallet + runs AI pipeline).
         // Falls back to AiService if Drive is not connected or the API fails.
         debugPrint('[Send] 📎 File attached — attempting upload API first');
+        debugPrint('[Send]   bytes pre-loaded : ${file?.bytes != null}');
+        debugPrint('[Send]   path available   : ${file?.path}');
         final uploadResult = await _sendViaUploadApi(file!, aiMessage);
         if (uploadResult != null) {
           debugPrint('[Send] ✅ Upload API succeeded — using its response');
           response = uploadResult;
         } else {
           debugPrint('[Send] ↩ Upload API returned null — falling back to AiService');
-          response = await AiService.instance.completeWithFile(
-            systemPrompt: _buildSystemPrompt(obligations),
-            userMessage:  aiMessage,
-            fileBytes:    file!.bytes!,
-            mimeType:     _mimeType(file.extension),
-            maxTokens:    1500,
-          );
-          debugPrint('[Send] ✅ AiService fallback completed');
+          // Re-resolve bytes for AiService (path fallback on mobile)
+          Uint8List? fallbackBytes = file?.bytes != null
+              ? Uint8List.fromList(file!.bytes!)
+              : null;
+          if (fallbackBytes == null && hasMobileFile) {
+            try {
+              fallbackBytes = await File(file!.path!).readAsBytes();
+              debugPrint('[Send] 📱 AiService fallback: read ${fallbackBytes.length} bytes from path');
+            } catch (e) {
+              debugPrint('[Send] ❌ AiService fallback: could not read file — $e');
+            }
+          }
+          if (fallbackBytes != null) {
+            response = await AiService.instance.completeWithFile(
+              systemPrompt: _buildSystemPrompt(obligations),
+              userMessage:  aiMessage,
+              fileBytes:    fallbackBytes,
+              mimeType:     _mimeType(file?.extension),
+              maxTokens:    1500,
+            );
+            debugPrint('[Send] ✅ AiService fallback completed');
+          } else {
+            response = 'Sorry, I could not read that file. Please try again.';
+          }
         }
       } else {
         // Text messages: try Buddy API first, fall back to AiService
@@ -504,10 +526,48 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   /// [_sendViaBuddyApi].  Returns the assistant reply, or null on failure
   /// (caller falls back to AiService).
   Future<String?> _sendViaUploadApi(PlatformFile file, String caption) async {
-    final bytes = file.bytes;
+    // ── Resolve bytes ──────────────────────────────────────────────────────────
+    // Web: file.bytes is always populated by the browser file picker.
+    // Mobile: file_picker on Android may return path-only (scoped storage).
+    //         We fall back to reading the file from disk.
+    Uint8List? bytes = file.bytes != null ? Uint8List.fromList(file.bytes!) : null;
+
+    if (bytes == null && !kIsWeb && file.path != null) {
+      debugPrint('[Upload] 📱 bytes null — reading from path: ${file.path}');
+      try {
+        bytes = await File(file.path!).readAsBytes();
+        debugPrint('[Upload] 📱 Read ${bytes.length} bytes from path');
+      } catch (e) {
+        debugPrint('[Upload] ❌ Could not read file from path: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Could not read file: ${file.name}\n$e'),
+              backgroundColor: const Color(0xFF290A0E),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+        return null;
+      }
+    }
+
     if (bytes == null || bytes.isEmpty) {
-      debugPrint('[Upload] ❌ Aborted — file.bytes is null or empty '
-          '(name=${file.name}, size=${file.size})');
+      debugPrint('[Upload] ❌ Aborted — no bytes available '
+          '(name=${file.name}, size=${file.size}, '
+          'hasBytes=${file.bytes != null}, hasPath=${file.path != null})');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not load file "${file.name}" — '
+                'no data available. Please try again.'),
+            backgroundColor: const Color(0xFF290A0E),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
       return null;
     }
 
@@ -584,7 +644,6 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       if (errorCode == 'drive_upload_failed') {
         debugPrint('[Upload] ⚠ Drive scope missing — showing reconnect banner');
         // ── Extra diagnostic: fetch /v1/users/me and dump linked accounts ─────
-        // This tells us exactly what scopes/accounts the server sees for this user.
         try {
           final me = await BuddyApiService.instance.getMe();
           debugPrint('[Upload] getMe() at time of drive error: $me');
@@ -598,13 +657,37 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         }
         _showDriveNotConnectedBanner();
       } else {
-        debugPrint('[Upload] ↩ Unhandled error (code=$errorCode) — falling back to AiService');
+        // Show a visible snackbar so errors are surfaced on real devices
+        final userMessage = detail?.isNotEmpty == true
+            ? detail!
+            : 'Upload failed (HTTP $statusCode). Please try again.';
+        debugPrint('[Upload] ↩ Unhandled error (code=$errorCode) — showing snackbar & falling back');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('📎 Upload failed: $userMessage'),
+              backgroundColor: const Color(0xFF290A0E),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        }
       }
       return null;
 
     } catch (e, st) {
       debugPrint('[Upload] ❌ Unexpected error: $e');
       debugPrint('[Upload]   stacktrace: $st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('📎 Upload failed: $e'),
+            backgroundColor: const Color(0xFF290A0E),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
       return null;
     }
   }
