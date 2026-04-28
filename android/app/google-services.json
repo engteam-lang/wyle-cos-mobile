@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "354436908915",
+    "project_id": "wyle-b6b0d",
+    "storage_bucket": "wyle-b6b0d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:354436908915:android:c98e69b010ccb1e4262706",
+        "android_client_info": {
+          "package_name": "com.wyle.wylecosapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDCNExcRI9v722WUeSyRthwhNpUAWMjBig"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
