@@ -291,7 +291,12 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
     try {
       // Works on web (webm/opus stream) and mobile (aac-lc file)
-      await BrainDumpService.instance.startRecording();
+      await BrainDumpService.instance.startRecording(
+        onSilenceDetected: () {
+          // Auto-stop after 3 s of silence — same as the user tapping Stop
+          if (mounted && _isRecording) _stopRecording();
+        },
+      );
       setState(() {
         _isRecording = true;
         _partialText = 'Recording voice note…';
@@ -323,6 +328,9 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   }
 
   Future<void> _stopRecording() async {
+    // Cancel silence-detection timer first so it can't fire again mid-teardown
+    BrainDumpService.instance.stopSilenceDetection();
+
     if (!BrainDumpService.instance.isRecording) {
       // speech_to_text fallback path
       _overlayCtrl.reverse().then((_) {

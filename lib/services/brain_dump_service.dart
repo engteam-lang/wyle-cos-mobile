@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -39,12 +40,26 @@ class BrainDumpService {
   AudioRecorder? _recorder;
   bool _isRecording = false;
 
+  // ── Silence detection ──────────────────────────────────────────────────────
+  /// dBFS threshold below which audio is considered silence.
+  /// Typical quiet room: −50 to −40 dBFS.  Speech: −30 dBFS and above.
+  static const double _silenceThresholdDb = -35.0;
+  static const Duration _silenceDuration  = Duration(seconds: 3);
+
+  StreamSubscription<Amplitude>? _amplitudeSub;
+  Timer?                          _silenceTimer;
+
   bool get isRecording => _isRecording;
 
   // ── Recording ──────────────────────────────────────────────────────────────
 
   /// Start recording.  Throws if microphone permission is denied.
-  Future<void> startRecording() async {
+  ///
+  /// [onSilenceDetected] — called once after [_silenceDuration] of continuous
+  /// silence so the caller can auto-stop the recording.  The callback fires on
+  /// the main Dart isolate (Timer guarantee) and is only called while
+  /// [isRecording] is still true.
+  Future<void> startRecording({void Function()? onSilenceDetected}) async {
     _recorder ??= AudioRecorder();
     final ok = await _recorder!.hasPermission();
     if (!ok) throw Exception('Microphone permission denied');
@@ -76,11 +91,50 @@ class BrainDumpService {
       );
     }
     _isRecording = true;
+
+    // ── Silence detection ──────────────────────────────────────────────────
+    if (onSilenceDetected != null) {
+      _cancelSilenceDetection(); // clear any leftover sub from a previous call
+
+      // Arm the initial 3-second silence timer immediately.
+      // It resets every time the amplitude rises above the threshold.
+      void armTimer() {
+        _silenceTimer?.cancel();
+        _silenceTimer = Timer(_silenceDuration, () {
+          if (_isRecording) onSilenceDetected();
+        });
+      }
+      armTimer();
+
+      _amplitudeSub = _recorder!
+          .onAmplitudeChanged(const Duration(milliseconds: 200))
+          .listen((amp) {
+        if (amp.current > _silenceThresholdDb) {
+          // User is speaking — reset the silence countdown
+          armTimer();
+        }
+        // Below threshold → let the timer run; it fires if 3 s elapse
+      });
+    }
   }
+
+  /// Cancel silence-detection timers and stream.
+  /// Called automatically by [stopRecording] and [cancelRecording].
+  void _cancelSilenceDetection() {
+    _silenceTimer?.cancel();
+    _amplitudeSub?.cancel();
+    _silenceTimer   = null;
+    _amplitudeSub   = null;
+  }
+
+  /// Public version so the caller can cancel if the user taps Stop manually
+  /// before the timer fires (avoids a redundant second call to _stopRecording).
+  void stopSilenceDetection() => _cancelSilenceDetection();
 
   /// Stop recording and return the raw audio bytes.
   Future<Uint8List?> stopRecording() async {
     if (!_isRecording || _recorder == null) return null;
+    _cancelSilenceDetection(); // ensure timer doesn't fire after stop
 
     final result = await _recorder!.stop();
     _isRecording = false;
@@ -109,6 +163,7 @@ class BrainDumpService {
 
   /// Cancel without saving.
   Future<void> cancelRecording() async {
+    _cancelSilenceDetection();
     if (_isRecording && _recorder != null) {
       await _recorder!.cancel();
       _isRecording = false;
