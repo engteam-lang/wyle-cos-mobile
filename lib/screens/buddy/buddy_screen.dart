@@ -174,9 +174,13 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
   // ── Welcome message ───────────────────────────────────────────────────────
   String get _welcomeMsg {
-    final firstName =
-        ref.read(appStateProvider).user?.name?.split(' ').first ?? 'there';
+    final name = ref.read(appStateProvider).user?.name;
     final obligations = ref.read(activeObligationsProvider);
+    return _computeWelcomeMsg(name, obligations);
+  }
+
+  static String _computeWelcomeMsg(String? userName, List<ObligationModel> obligations) {
+    final firstName = userName?.split(' ').first ?? 'there';
     if (obligations.isEmpty) {
       return 'Hey $firstName. Nothing is on my radar yet. '
           'Tell me what is on your mind and I will get to work.';
@@ -1490,7 +1494,19 @@ Currency: AED. Context: Dubai, UAE.''';
         if (_isProcessing && index == _messages.length) {
           return _buildTypingIndicator();
         }
-        return _buildMessageBubble(_messages[index]);
+        
+        var msg = _messages[index];
+        // Dynamically update the welcome message if it's the first message and it looks like a welcome message
+        if (index == 0 && msg.role == 'assistant' && msg.content.startsWith('Hey ')) {
+          final obligations = ref.read(activeObligationsProvider);
+          final updatedContent = _BuddyScreenState._computeWelcomeMsg(
+            ref.read(appStateProvider).user?.name,
+            obligations,
+          );
+          msg = msg.copyWith(content: updatedContent);
+        }
+        
+        return _buildMessageBubble(msg);
       },
     );
   }

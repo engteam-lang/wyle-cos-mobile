@@ -301,6 +301,7 @@ class AppStateNotifier extends StateNotifier<AppState> {
       executionPath: 'Scheduled by Buddy',
       notes:         noteText,
       source:        item.source,
+      startsAt:      dateStr,
     );
   }
 

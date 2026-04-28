@@ -11,6 +11,20 @@ class ChatMessageModel {
     required this.timestamp,
   });
 
+  ChatMessageModel copyWith({
+    String? id,
+    String? role,
+    String? content,
+    DateTime? timestamp,
+  }) {
+    return ChatMessageModel(
+      id: id ?? this.id,
+      role: role ?? this.role,
+      content: content ?? this.content,
+      timestamp: timestamp ?? this.timestamp,
+    );
+  }
+
   factory ChatMessageModel.user(String content) => ChatMessageModel(
     id:        DateTime.now().millisecondsSinceEpoch.toString(),
     role:      'user',
