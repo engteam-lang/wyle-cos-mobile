@@ -52,9 +52,11 @@ class BrainDumpService {
 
   static const Duration _silenceDuration = Duration(seconds: 3);
 
-  StreamSubscription<Amplitude>? _amplitudeSub;
-  Timer?                          _silenceTimer;
-  bool                            _hasSpeechStarted = false;
+  // onAmplitudeChanged stream is unreliable on web (Chrome MediaRecorder does
+  // not push amplitude events).  We poll getAmplitude() on a Timer instead.
+  Timer? _amplitudePollTimer;
+  Timer? _silenceTimer;
+  bool   _hasSpeechStarted = false;
 
   bool get isRecording => _isRecording;
 
@@ -102,39 +104,46 @@ class BrainDumpService {
     // ── Silence detection ──────────────────────────────────────────────────
     if (onSilenceDetected != null) {
       _cancelSilenceDetection(); // clear any leftover state from a previous call
-      _hasSpeechStarted = false; // wait for first speech before tracking pauses
+      _hasSpeechStarted = false;
 
-      _amplitudeSub = _recorder!
-          .onAmplitudeChanged(const Duration(milliseconds: 100))
-          .listen((amp) {
-        if (amp.current > _speechThresholdDb) {
-          // ── User is clearly speaking ───────────────────────────────────
-          // Mark speech started and cancel the silence countdown.
-          _hasSpeechStarted = true;
-          _silenceTimer?.cancel();
-          _silenceTimer = null;
-        } else if (_hasSpeechStarted && _silenceTimer == null) {
-          // ── Amplitude dropped below speech threshold AFTER speech started
-          // Arm the 3-second countdown.  If the user speaks again before it
-          // fires the block above cancels and resets it.
-          _silenceTimer = Timer(_silenceDuration, () {
-            if (_isRecording) onSilenceDetected();
-          });
-        }
-        // _hasSpeechStarted == false  → user hasn't spoken yet, do nothing.
-        // _silenceTimer != null       → countdown already running, let it run.
-      });
+      // Poll amplitude every 100 ms using getAmplitude() — works on web and
+      // mobile alike (onAmplitudeChanged stream is unreliable in Chrome).
+      _amplitudePollTimer = Timer.periodic(
+        const Duration(milliseconds: 100),
+        (_) async {
+          if (!_isRecording || _recorder == null) return;
+          try {
+            final amp = await _recorder!.getAmplitude();
+
+            if (amp.current > _speechThresholdDb) {
+              // ── User is clearly speaking ─────────────────────────────
+              _hasSpeechStarted = true;
+              _silenceTimer?.cancel();
+              _silenceTimer = null;
+            } else if (_hasSpeechStarted && _silenceTimer == null) {
+              // ── Silence after speech — start the 3-second countdown ──
+              _silenceTimer = Timer(_silenceDuration, () {
+                if (_isRecording) onSilenceDetected();
+              });
+            }
+            // _hasSpeechStarted == false → not spoken yet, do nothing.
+            // _silenceTimer != null      → countdown running, let it go.
+          } catch (_) {
+            // getAmplitude() failed (e.g. recorder stopped mid-poll) — ignore.
+          }
+        },
+      );
     }
   }
 
   /// Cancel silence-detection timers and stream.
   /// Called automatically by [stopRecording] and [cancelRecording].
   void _cancelSilenceDetection() {
+    _amplitudePollTimer?.cancel();
     _silenceTimer?.cancel();
-    _amplitudeSub?.cancel();
-    _silenceTimer     = null;
-    _amplitudeSub     = null;
-    _hasSpeechStarted = false;
+    _amplitudePollTimer = null;
+    _silenceTimer       = null;
+    _hasSpeechStarted   = false;
   }
 
   /// Public version so the caller can cancel if the user taps Stop manually
