@@ -1478,6 +1478,44 @@ Currency: AED. Context: Dubai, UAE.''';
   }
 
   // ── Message list ──────────────────────────────────────────────────────────
+  String _formatDatesInText(String text) {
+    final regex = RegExp(r'\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?)?\b');
+    return text.replaceAllMapped(regex, (match) {
+      final isoStr = match.group(0)!;
+      try {
+        final cleanIso = isoStr.length > 19 ? isoStr.substring(0, 19) : isoStr;
+        final dt = DateTime.parse(cleanIso);
+        
+        final day = dt.day;
+        String suffix = 'th';
+        if (day >= 11 && day <= 13) {
+          suffix = 'th';
+        } else {
+          switch (day % 10) {
+            case 1: suffix = 'st'; break;
+            case 2: suffix = 'nd'; break;
+            case 3: suffix = 'rd'; break;
+            default: suffix = 'th'; break;
+          }
+        }
+        
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        final month = months[dt.month - 1];
+        
+        if (isoStr.contains('T')) {
+          final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+          final min = dt.minute.toString().padLeft(2, '0');
+          final ampm = dt.hour < 12 ? 'AM' : 'PM';
+          return '${day}$suffix $month ${dt.year} at $h:$min $ampm';
+        } else {
+          return '${day}$suffix $month ${dt.year}';
+        }
+      } catch (_) {
+        return isoStr;
+      }
+    });
+  }
+
   Widget _buildMessageList() {
     final hasUserMessages = _messages.any((m) => m.role == 'user');
 
@@ -1496,6 +1534,12 @@ Currency: AED. Context: Dubai, UAE.''';
         }
         
         var msg = _messages[index];
+        
+        // Intercept raw ISO dates from backend and format them beautifully
+        if (!hasUserMessages || msg.role == 'assistant') {
+          msg = msg.copyWith(content: _formatDatesInText(msg.content));
+        }
+
         // Dynamically update the welcome message if it's the first message and it looks like a welcome message
         if (index == 0 && msg.role == 'assistant' && msg.content.startsWith('Hey ')) {
           final obligations = ref.read(activeObligationsProvider);
