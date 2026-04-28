@@ -41,10 +41,16 @@ class BrainDumpService {
   bool _isRecording = false;
 
   // ── Silence detection ──────────────────────────────────────────────────────
-  /// dBFS threshold below which audio is considered silence.
-  /// Typical quiet room: −50 to −40 dBFS.  Speech: −30 dBFS and above.
-  static const double _silenceThresholdDb = -35.0;
-  static const Duration _silenceDuration  = Duration(seconds: 3);
+  /// Amplitude must exceed this to be treated as speech (dBFS).
+  /// −20 dBFS ≈ 10 % of max volume — clearly above mic hiss and
+  /// background noise (~−35 to −40 dBFS) but well within normal speech.
+  static const double _speechThresholdDb = -20.0;
+
+  /// Amplitude must stay below this for [_silenceDuration] to auto-stop.
+  /// Using the same value: once speech drops below −20 the countdown starts.
+  static const double _silenceThresholdDb = -20.0;
+
+  static const Duration _silenceDuration = Duration(seconds: 3);
 
   StreamSubscription<Amplitude>? _amplitudeSub;
   Timer?                          _silenceTimer;
@@ -99,24 +105,24 @@ class BrainDumpService {
       _hasSpeechStarted = false; // wait for first speech before tracking pauses
 
       _amplitudeSub = _recorder!
-          .onAmplitudeChanged(const Duration(milliseconds: 200))
+          .onAmplitudeChanged(const Duration(milliseconds: 100))
           .listen((amp) {
-        if (amp.current > _silenceThresholdDb) {
-          // ── User is speaking ──────────────────────────────────────────
+        if (amp.current > _speechThresholdDb) {
+          // ── User is clearly speaking ───────────────────────────────────
+          // Mark speech started and cancel the silence countdown.
           _hasSpeechStarted = true;
-          // Cancel any running silence countdown — they're still talking
           _silenceTimer?.cancel();
           _silenceTimer = null;
         } else if (_hasSpeechStarted && _silenceTimer == null) {
-          // ── Silence detected AFTER speech has started ─────────────────
-          // Arm the 3-second countdown.  If the user starts speaking again
-          // before it fires, the block above cancels it.
+          // ── Amplitude dropped below speech threshold AFTER speech started
+          // Arm the 3-second countdown.  If the user speaks again before it
+          // fires the block above cancels and resets it.
           _silenceTimer = Timer(_silenceDuration, () {
             if (_isRecording) onSilenceDetected();
           });
         }
-        // If _hasSpeechStarted is false: user hasn't spoken yet → do nothing.
-        // If _silenceTimer != null: countdown already running → let it run.
+        // _hasSpeechStarted == false  → user hasn't spoken yet, do nothing.
+        // _silenceTimer != null       → countdown already running, let it run.
       });
     }
   }
