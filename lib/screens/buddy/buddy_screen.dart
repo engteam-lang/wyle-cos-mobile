@@ -856,7 +856,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       String? noteText;
       if (dateIso != null) {
         try {
-          final parsed  = DateTime.parse(dateIso);
+          final parsed  = DateTime.parse(dateIso).toLocal();
           final start   = DateTime(parsed.year, parsed.month, parsed.day,
               parsed.hour, parsed.minute);
           final today   = DateTime(DateTime.now().year, DateTime.now().month,
@@ -958,7 +958,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       String? dateDisplay;
       if (dateIso != null) {
         try {
-          final dt    = DateTime.parse(dateIso);
+          final dt    = DateTime.parse(dateIso).toLocal();
           final local = DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute);
           final today = DateTime(DateTime.now().year, DateTime.now().month,
               DateTime.now().day);
@@ -1019,7 +1019,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     int daysUntil = 1;
     if (dateIso != null) {
       try {
-        final dt    = DateTime.parse(dateIso);
+        final dt    = DateTime.parse(dateIso).toLocal();
         final local = DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute);
         final today = DateTime(DateTime.now().year, DateTime.now().month,
             DateTime.now().day);
@@ -3189,8 +3189,7 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
     final rawIso = o.startsAt;
     if (rawIso != null) {
       try {
-        final parsed = DateTime.parse(rawIso);
-        // Treat the timestamp as local (backend sends nominal local times)
+        final parsed = DateTime.parse(rawIso).toLocal();
         final dt = DateTime(parsed.year, parsed.month, parsed.day,
             parsed.hour, parsed.minute);
 
