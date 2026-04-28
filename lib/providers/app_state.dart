@@ -255,7 +255,8 @@ class AppStateNotifier extends StateNotifier<AppState> {
     final dateStr = item.startsAt ?? item.remindAt;
     if (dateStr != null) {
       try {
-        final parsed = DateTime.parse(dateStr).toLocal();
+        final cleanIso = dateStr.length > 19 ? dateStr.substring(0, 19) : dateStr;
+        final parsed = DateTime.parse(cleanIso);
         final date = DateTime(parsed.year, parsed.month, parsed.day,
             parsed.hour, parsed.minute);
         final today = DateTime(DateTime.now().year, DateTime.now().month,

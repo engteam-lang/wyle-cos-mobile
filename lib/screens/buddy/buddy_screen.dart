@@ -181,9 +181,30 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       return 'Hey $firstName. Nothing is on my radar yet. '
           'Tell me what is on your mind and I will get to work.';
     }
-    return 'Hey $firstName. I can see ${obligations.length} active item'
-        '${obligations.length == 1 ? '' : 's'} on your radar. '
+    // Count only items that are truly urgent (overdue or starting within 2 hrs)
+    final urgentCount = obligations.where(_isUrgentObligation).length;
+    if (urgentCount == 0) {
+      return 'Hey $firstName. Nothing urgent right now. '
+          'Tell me what is on your mind and I will get to work.';
+    }
+    return 'Hey $firstName. I can see $urgentCount urgent item'
+        '${urgentCount == 1 ? '' : 's'} on my radar. '
         'Tell me what is on your mind and I will get to work.';
+  }
+
+  /// Returns true when [o] is overdue OR starts within the next 2 hours.
+  /// Used for both the URGENT section in the tasks panel and the welcome message.
+  static bool _isUrgentObligation(ObligationModel o) {
+    if (o.startsAt != null) {
+      try {
+        final cleanIso = o.startsAt!.length > 19 ? o.startsAt!.substring(0, 19) : o.startsAt!;
+        final dt     = DateTime.parse(cleanIso);
+        final cutoff = DateTime.now().add(const Duration(hours: 2));
+        return dt.isBefore(cutoff);   // covers both overdue and within-2-hrs
+      } catch (_) {}
+    }
+    // No startsAt — fall back to day-level granularity
+    return o.daysUntil <= 0;
   }
 
   // ── History persistence ───────────────────────────────────────────────────
@@ -856,7 +877,8 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       String? noteText;
       if (dateIso != null) {
         try {
-          final parsed  = DateTime.parse(dateIso).toLocal();
+          final cleanIso = dateIso.length > 19 ? dateIso.substring(0, 19) : dateIso;
+          final parsed  = DateTime.parse(cleanIso);
           final start   = DateTime(parsed.year, parsed.month, parsed.day,
               parsed.hour, parsed.minute);
           final today   = DateTime(DateTime.now().year, DateTime.now().month,
@@ -958,7 +980,8 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       String? dateDisplay;
       if (dateIso != null) {
         try {
-          final dt    = DateTime.parse(dateIso).toLocal();
+          final cleanIso = dateIso.length > 19 ? dateIso.substring(0, 19) : dateIso;
+          final dt    = DateTime.parse(cleanIso);
           final local = DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute);
           final today = DateTime(DateTime.now().year, DateTime.now().month,
               DateTime.now().day);
@@ -1019,7 +1042,8 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     int daysUntil = 1;
     if (dateIso != null) {
       try {
-        final dt    = DateTime.parse(dateIso).toLocal();
+        final cleanIso = dateIso.length > 19 ? dateIso.substring(0, 19) : dateIso;
+        final dt    = DateTime.parse(cleanIso);
         final local = DateTime(dt.year, dt.month, dt.day, dt.hour, dt.minute);
         final today = DateTime(DateTime.now().year, DateTime.now().month,
             DateTime.now().day);
@@ -2657,11 +2681,12 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
     // Watch the same provider the FAB badge uses — both counts are always in sync
     final obligations = ref.watch(activeObligationsProvider);
 
+    // Urgent = overdue OR starts within the next 2 hours (time-aware check)
     final urgent = obligations
-        .where((o) => o.daysUntil <= 0 || o.risk == 'high')
+        .where(_BuddyScreenState._isUrgentObligation)
         .toList();
     final active = obligations
-        .where((o) => !(o.daysUntil <= 0 || o.risk == 'high'))
+        .where((o) => !_BuddyScreenState._isUrgentObligation(o))
         .toList();
 
     return Container(
@@ -3189,7 +3214,8 @@ class _TasksBottomSheetState extends ConsumerState<_TasksBottomSheet> {
     final rawIso = o.startsAt;
     if (rawIso != null) {
       try {
-        final parsed = DateTime.parse(rawIso).toLocal();
+        final cleanIso = rawIso.length > 19 ? rawIso.substring(0, 19) : rawIso;
+        final parsed = DateTime.parse(cleanIso);
         final dt = DateTime(parsed.year, parsed.month, parsed.day,
             parsed.hour, parsed.minute);
 
