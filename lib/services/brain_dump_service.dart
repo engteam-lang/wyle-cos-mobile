@@ -48,6 +48,7 @@ class BrainDumpService {
 
   StreamSubscription<Amplitude>? _amplitudeSub;
   Timer?                          _silenceTimer;
+  bool                            _hasSpeechStarted = false;
 
   bool get isRecording => _isRecording;
 
@@ -94,26 +95,28 @@ class BrainDumpService {
 
     // ── Silence detection ──────────────────────────────────────────────────
     if (onSilenceDetected != null) {
-      _cancelSilenceDetection(); // clear any leftover sub from a previous call
-
-      // Arm the initial 3-second silence timer immediately.
-      // It resets every time the amplitude rises above the threshold.
-      void armTimer() {
-        _silenceTimer?.cancel();
-        _silenceTimer = Timer(_silenceDuration, () {
-          if (_isRecording) onSilenceDetected();
-        });
-      }
-      armTimer();
+      _cancelSilenceDetection(); // clear any leftover state from a previous call
+      _hasSpeechStarted = false; // wait for first speech before tracking pauses
 
       _amplitudeSub = _recorder!
           .onAmplitudeChanged(const Duration(milliseconds: 200))
           .listen((amp) {
         if (amp.current > _silenceThresholdDb) {
-          // User is speaking — reset the silence countdown
-          armTimer();
+          // ── User is speaking ──────────────────────────────────────────
+          _hasSpeechStarted = true;
+          // Cancel any running silence countdown — they're still talking
+          _silenceTimer?.cancel();
+          _silenceTimer = null;
+        } else if (_hasSpeechStarted && _silenceTimer == null) {
+          // ── Silence detected AFTER speech has started ─────────────────
+          // Arm the 3-second countdown.  If the user starts speaking again
+          // before it fires, the block above cancels it.
+          _silenceTimer = Timer(_silenceDuration, () {
+            if (_isRecording) onSilenceDetected();
+          });
         }
-        // Below threshold → let the timer run; it fires if 3 s elapse
+        // If _hasSpeechStarted is false: user hasn't spoken yet → do nothing.
+        // If _silenceTimer != null: countdown already running → let it run.
       });
     }
   }
@@ -123,8 +126,9 @@ class BrainDumpService {
   void _cancelSilenceDetection() {
     _silenceTimer?.cancel();
     _amplitudeSub?.cancel();
-    _silenceTimer   = null;
-    _amplitudeSub   = null;
+    _silenceTimer     = null;
+    _amplitudeSub     = null;
+    _hasSpeechStarted = false;
   }
 
   /// Public version so the caller can cancel if the user taps Stop manually
