@@ -7,14 +7,26 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'buddy_api_service.dart';
 import '../models/brain_dump_model.dart';
+import '../models/conversation_model.dart';
 
 /// Result returned after the full Brain Dump pipeline completes.
 class BrainDumpResult {
   final String transcript;
   final int    savedItemCount;
+
+  /// Buddy's natural-language reply from the backend job response.
+  /// Empty string when the backend didn't return one (older versions).
+  final String assistantContent;
+
+  /// Action-item proposals extracted from the voice note.
+  /// Mirrors [SuggestedAction] from the chat message API.
+  final List<SuggestedAction> suggestedActions;
+
   const BrainDumpResult({
     required this.transcript,
     required this.savedItemCount,
+    this.assistantContent  = '',
+    this.suggestedActions  = const [],
   });
 }
 
@@ -266,8 +278,10 @@ class BrainDumpService {
     }
 
     return BrainDumpResult(
-      transcript:     transcript,
-      savedItemCount: savedCount,
+      transcript:       transcript,
+      savedItemCount:   savedCount,
+      assistantContent: current.assistantContent ?? '',
+      suggestedActions: current.suggestedActions,
     );
   }
 }

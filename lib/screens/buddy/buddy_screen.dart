@@ -397,13 +397,15 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       });
       _scrollToBottom();
 
-      // Build assistant reply
-      final itemsLine = result.savedItemCount > 0
-          ? 'I\'ve saved **${result.savedItemCount}** action item'
-            '${result.savedItemCount == 1 ? '' : 's'} to your inbox.'
-          : 'No new action items were found in your voice note.';
-      final assistantMsg =
-          'Got it! Here\'s what I heard:\n\n*"$transcript"*\n\n$itemsLine';
+      // ── Use Buddy's real assistant_content from the backend ───────────────
+      // Fall back to a generic reply only when the backend returns empty (e.g.
+      // older server version that doesn't populate the field yet).
+      final assistantMsg = result.assistantContent.trim().isNotEmpty
+          ? result.assistantContent.trim()
+          : (result.savedItemCount > 0
+              ? 'Got it! I\'ve added **${result.savedItemCount}** action item'
+                '${result.savedItemCount == 1 ? '' : 's'} to your inbox.'
+              : 'Got it! I heard your voice note — no new action items were found.');
 
       setState(() {
         _messages.add(ChatMessageModel.assistant(assistantMsg));
@@ -412,8 +414,22 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       _saveHistory();
       _scrollToBottom();
 
-      // Refresh inbox so new items appear immediately
-      if (result.savedItemCount > 0) {
+      // ── Process suggested_actions from the brain dump job ─────────────────
+      // Reuse the exact same pipeline as text-chat suggested actions so that
+      // items are added to the inbox with a snackbar confirmation.
+      if (result.suggestedActions.isNotEmpty) {
+        _processSuggestedActions(ChatApiResponse(
+          conversationId:         0,
+          userMessageId:          0,
+          assistantMessageId:     0,
+          assistantContent:       assistantMsg,
+          suggestedActions:       result.suggestedActions,
+          persistedActionItemIds: const [],
+        ));
+      }
+
+      // Refresh inbox so any backend-persisted items appear immediately
+      if (result.savedItemCount > 0 || result.suggestedActions.isNotEmpty) {
         ref.read(appStateProvider.notifier).loadObligationsFromApi();
       }
 
