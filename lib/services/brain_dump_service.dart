@@ -81,7 +81,7 @@ class BrainDumpService {
           encoder:     AudioEncoder.opus,   // → audio/webm;codecs=opus in Chrome
           sampleRate:  16000,
           numChannels: 1,
-          bitRate:     64000,
+          bitRate:     32000,   // 32 kbps — 50 % smaller upload, same STT quality
         ),
         path: '',
       );
@@ -94,7 +94,7 @@ class BrainDumpService {
           encoder:     AudioEncoder.aacLc,
           sampleRate:  16000,
           numChannels: 1,
-          bitRate:     64000,
+          bitRate:     32000,   // 32 kbps — 50 % smaller upload, same STT quality
         ),
         path: path,
       );
@@ -193,7 +193,15 @@ class BrainDumpService {
 
   /// Upload [audioBytes] → poll until done → commit all items.
   /// Returns transcript text and number of action items saved.
-  Future<BrainDumpResult> processAudio(Uint8List audioBytes) async {
+  ///
+  /// [onStatus] is called at each stage so the UI can show granular progress:
+  ///   'uploading'    — audio is being sent to the server
+  ///   'transcribing' — server is processing; polling for result
+  ///   'saving'       — committing extracted action items
+  Future<BrainDumpResult> processAudio(
+    Uint8List audioBytes, {
+    void Function(String status)? onStatus,
+  }) async {
     // Platform-specific format:
     //   Web    → audio/webm  (Opus / MediaRecorder)
     //   Mobile → audio/mp4   (AAC-LC in .m4a container)
@@ -201,9 +209,10 @@ class BrainDumpService {
     final mimeType = kIsWeb ? 'audio/webm'     : 'audio/mp4';
 
     // 1. Create job
+    onStatus?.call('uploading');
     final job = await BuddyApiService.instance.createBrainDumpJob();
 
-    // 2. Upload audio
+    // 2. Upload audio — server begins transcription immediately on receipt
     BrainDumpJobModel current =
         await BuddyApiService.instance.uploadBrainDumpAudio(
       jobId:      job.id,
@@ -212,10 +221,24 @@ class BrainDumpService {
       mimeType:   mimeType,
     );
 
-    // 3. Poll until status is awaiting_review / done / failed  (max 60 s)
+    // 3. Poll with exponential backoff so short clips feel nearly instant.
+    //
+    //    Delay schedule (ms): 300 → 600 → 1 000 → 1 500 → 2 000 → 2 000 …
+    //
+    //    Old flat-2 s approach: minimum wait = 2 000 ms before the first check.
+    //    New approach: first check after only 300 ms — ~6× faster for clips
+    //    where the server finishes in under a second.
+    //    Safety net: 40 attempts × ~2 s average ≈ 60 s max (same as before).
+    onStatus?.call('transcribing');
+    const _pollDelaysMs = [300, 600, 1000, 1500, 2000];
     int attempts = 0;
-    while (current.isPending && attempts < 30) {
-      await Future.delayed(const Duration(seconds: 2));
+    const maxAttempts = 40;
+
+    while (current.isPending && attempts < maxAttempts) {
+      final ms = attempts < _pollDelaysMs.length
+          ? _pollDelaysMs[attempts]
+          : _pollDelaysMs.last;
+      await Future.delayed(Duration(milliseconds: ms));
       current = await BuddyApiService.instance.getBrainDumpJob(job.id);
       attempts++;
     }
@@ -228,6 +251,7 @@ class BrainDumpService {
     final transcript = current.transcript ?? '';
 
     // 4. Commit all extracted items
+    onStatus?.call('saving');
     int savedCount = 0;
     if (current.isComplete) {
       try {

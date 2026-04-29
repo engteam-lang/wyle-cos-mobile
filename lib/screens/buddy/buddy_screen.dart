@@ -366,9 +366,21 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   /// Upload bytes → poll → commit → show result in chat.
   Future<void> _processBrainDump(List<int> bytes) async {
     try {
-      setState(() => _partialText = 'Uploading & transcribing…');
-      final result = await BrainDumpService.instance
-          .processAudio(Uint8List.fromList(bytes));
+      setState(() => _partialText = 'Uploading…');
+      final result = await BrainDumpService.instance.processAudio(
+        Uint8List.fromList(bytes),
+        onStatus: (status) {
+          if (!mounted) return;
+          setState(() {
+            _partialText = switch (status) {
+              'uploading'    => 'Uploading…',
+              'transcribing' => 'Transcribing…',
+              'saving'       => 'Saving items…',
+              _              => 'Processing…',
+            };
+          });
+        },
+      );
 
       // Hide overlay
       await _overlayCtrl.reverse();
