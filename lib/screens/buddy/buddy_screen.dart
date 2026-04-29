@@ -2396,6 +2396,11 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
     _orbCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1400))
       ..repeat(reverse: true);
+    if (!widget.isProcessing) _startWaveTimer();
+  }
+
+  void _startWaveTimer() {
+    _waveTimer?.cancel();
     _waveTimer = Timer.periodic(const Duration(milliseconds: 180), (_) {
       if (mounted) {
         setState(() {
@@ -2407,11 +2412,35 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
   }
 
   @override
+  void didUpdateWidget(_VoiceRecordingOverlay old) {
+    super.didUpdateWidget(old);
+    if (widget.isProcessing && !old.isProcessing) {
+      // Recording stopped — freeze waveform to a flat resting line
+      _waveTimer?.cancel();
+      _waveTimer = null;
+      setState(() => _barHeights = List.filled(9, 4.0));
+    } else if (!widget.isProcessing && old.isProcessing) {
+      _startWaveTimer();
+    }
+  }
+
+  @override
   void dispose() {
     _rippleCtrl.dispose();
     _orbCtrl.dispose();
     _waveTimer?.cancel();
     super.dispose();
+  }
+
+  /// Dynamic top label that reflects the current stage.
+  String get _titleLabel {
+    if (!widget.isProcessing) return 'BUDDY IS LISTENING';
+    return switch (widget.partialText) {
+      'Uploading…'    => 'SENDING TO BUDDY',
+      'Transcribing…' => 'BUDDY IS THINKING',
+      'Saving items…' => 'SAVING ITEMS',
+      _               => 'BUDDY IS THINKING',
+    };
   }
 
   Widget _rippleRing(double phase, double maxExp, double maxOpacity, double sw) {
@@ -2443,11 +2472,17 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
           child: Column(
             children: [
               const SizedBox(height: 60),
-              Text('BUDDY IS LISTENING',
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: Text(
+                  _titleLabel,
+                  key: ValueKey(_titleLabel),
                   style: GoogleFonts.inter(
                       color: _verdigris.withOpacity(0.7),
                       fontSize: 11, fontWeight: FontWeight.w600,
-                      letterSpacing: 3.0)),
+                      letterSpacing: 3.0),
+                ),
+              ),
               const Spacer(),
               SizedBox(
                 width: 260, height: 260,
@@ -2518,8 +2553,14 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
                 }),
               ),
               const SizedBox(height: 36),
+              // Quoted pill — only shown during recording when there is real
+              // partial speech text.  Hidden entirely during processing so the
+              // status label (Uploading… / Transcribing… / Saving items…) does
+              // not appear twice.
               AnimatedOpacity(
-                opacity: widget.partialText.isNotEmpty ? 1.0 : 0.0,
+                opacity: (!widget.isProcessing && widget.partialText.isNotEmpty)
+                    ? 1.0
+                    : 0.0,
                 duration: const Duration(milliseconds: 200),
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 40),
@@ -2536,7 +2577,6 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
                         ? '"${widget.partialText}"'
                         : '',
                     textAlign: TextAlign.center,
-                    // No maxLines / no ellipsis — show the full transcript
                     style: GoogleFonts.inter(
                         color: Colors.white.withOpacity(0.88),
                         fontSize: 14, fontStyle: FontStyle.italic,
@@ -2545,24 +2585,27 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
                 ),
               ),
               const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _BlinkingDot(),
-                  const SizedBox(width: 8),
-                  Text('Listening',
-                      style: GoogleFonts.inter(
-                          color: Colors.white70, fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 1.8)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (!widget.isProcessing)
+              // Listening indicator — hidden during processing
+              if (!widget.isProcessing) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _BlinkingDot(),
+                    const SizedBox(width: 8),
+                    Text('Listening',
+                        style: GoogleFonts.inter(
+                            color: Colors.white70, fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 1.8)),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 Text('Auto-stops after 3 s of silence',
                     style: GoogleFonts.inter(
                         color: Colors.white24, fontSize: 11,
                         letterSpacing: 0.3)),
+              ] else
+                const SizedBox(height: 36), // keep spacing consistent
               const Spacer(),
               // ── Bottom action ──────────────────────────────────────────────
               if (widget.isProcessing) ...[
