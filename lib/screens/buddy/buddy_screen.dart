@@ -139,6 +139,13 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   bool           _isBrainDumpProcessing = false; // uploading/polling after stop
   String         _partialText          = '';
   PlatformFile?  _attachedFile;
+
+  // ── Location cache ────────────────────────────────────────────────────────
+  /// Last GPS fix.  Re-used for up to [_kPositionCacheMinutes] minutes so we
+  /// don't call the GPS radio on every single message (battery + latency).
+  Position?  _cachedPosition;
+  DateTime?  _positionFetchedAt;
+  static const _kPositionCacheMinutes = 5;
   /// Keyed by message ID → list of conflict options waiting for the user to pick.
   /// When the user selects an option the entry is removed and the task is created.
   final Map<String, List<_ConflictOption>> _pendingConflicts = {};
@@ -160,6 +167,9 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         parent: _overlayCtrl, curve: Curves.easeOutCubic);
     VoiceService.instance.init();
     _loadHistory();
+    // Proactively request location permission + pre-fetch initial fix so the
+    // first chat message already has lat/lon without any extra delay.
+    _requestLocationPermission();
   }
 
   @override
@@ -828,38 +838,89 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     );
   }
 
-  // ── Location helper ───────────────────────────────────────────────────────
+  // ── Location helpers ──────────────────────────────────────────────────────
+
+  /// Called once from initState.  Asks for permission if not yet granted, then
+  /// pre-fetches an initial GPS fix into [_cachedPosition] so the first message
+  /// already has lat/lon without any visible delay.
+  ///
+  /// Silently no-ops on web or if the user permanently denies permission.
+  Future<void> _requestLocationPermission() async {
+    if (kIsWeb) return;
+    try {
+      var perm = await Geolocator.checkPermission();
+
+      // Ask the user if they haven't decided yet
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+
+      if (perm == LocationPermission.always ||
+          perm == LocationPermission.whileInUse) {
+        // Pre-warm the cache so _buildLocationPayload() is instant on msg #1
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy:  LocationAccuracy.low, // city-level, fast + battery-friendly
+            timeLimit: Duration(seconds: 8),
+          ),
+        );
+        if (mounted) {
+          _cachedPosition    = pos;
+          _positionFetchedAt = DateTime.now();
+        }
+      }
+    } catch (_) {
+      // Permission denied permanently, GPS unavailable, or timed out — ignore.
+    }
+  }
 
   /// Builds a [LocationPayload] to attach to every chat message.
   ///
-  /// Always includes the device timezone (no permissions needed).
-  /// GPS coordinates are added silently **only** when the user has already
-  /// granted location permission — no permission dialog is ever shown here.
+  /// Always includes the device timezone (free, no permissions).
+  /// GPS coordinates come from the 5-minute cache so there is zero added
+  /// latency per message.  If the cache is stale a fresh fix is attempted
+  /// silently in the background; the current message still sends immediately
+  /// with whatever is cached.
   Future<LocationPayload> _buildLocationPayload() async {
-    // Timezone: e.g. "GST", "+04:00" — always available
+    // Timezone — always available, no permission required
     final tz = DateTime.now().timeZoneName;
 
     double? lat, lon, accuracy;
 
-    // GPS: only use existing permission — never prompt from here
     try {
       if (!kIsWeb) {
         final perm = await Geolocator.checkPermission();
         if (perm == LocationPermission.always ||
             perm == LocationPermission.whileInUse) {
-          final pos = await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.low,  // fast, battery-friendly
-              timeLimit: Duration(seconds: 5),
-            ),
-          );
-          lat      = pos.latitude;
-          lon      = pos.longitude;
-          accuracy = pos.accuracy;
+
+          final now      = DateTime.now();
+          final cacheAge = _positionFetchedAt != null
+              ? now.difference(_positionFetchedAt!).inMinutes
+              : _kPositionCacheMinutes + 1; // treat as stale if never fetched
+
+          if (_cachedPosition != null && cacheAge < _kPositionCacheMinutes) {
+            // ── Serve from cache (sub-millisecond) ─────────────────────────
+            lat      = _cachedPosition!.latitude;
+            lon      = _cachedPosition!.longitude;
+            accuracy = _cachedPosition!.accuracy;
+          } else {
+            // ── Fresh GPS fix ───────────────────────────────────────────────
+            final pos = await Geolocator.getCurrentPosition(
+              locationSettings: const LocationSettings(
+                accuracy:  LocationAccuracy.low,
+                timeLimit: Duration(seconds: 5),
+              ),
+            );
+            _cachedPosition    = pos;
+            _positionFetchedAt = now;
+            lat      = pos.latitude;
+            lon      = pos.longitude;
+            accuracy = pos.accuracy;
+          }
         }
       }
     } catch (_) {
-      // GPS unavailable or timed out — continue without it
+      // GPS unavailable or timed out — send message without coordinates
     }
 
     return LocationPayload(
