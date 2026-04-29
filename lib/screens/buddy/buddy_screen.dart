@@ -846,11 +846,12 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   ///
   /// Silently no-ops on web or if the user permanently denies permission.
   Future<void> _requestLocationPermission() async {
-    if (kIsWeb) return;
     try {
       var perm = await Geolocator.checkPermission();
 
-      // Ask the user if they haven't decided yet
+      // Ask the user if they haven't decided yet.
+      // On Android/iOS this shows the native OS dialog.
+      // On web this triggers the browser's "Allow location" prompt.
       if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
       }
@@ -888,35 +889,34 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     double? lat, lon, accuracy;
 
     try {
-      if (!kIsWeb) {
-        final perm = await Geolocator.checkPermission();
-        if (perm == LocationPermission.always ||
-            perm == LocationPermission.whileInUse) {
+      // Works on Android, iOS, and web (browser Geolocation API).
+      final perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.always ||
+          perm == LocationPermission.whileInUse) {
 
-          final now      = DateTime.now();
-          final cacheAge = _positionFetchedAt != null
-              ? now.difference(_positionFetchedAt!).inMinutes
-              : _kPositionCacheMinutes + 1; // treat as stale if never fetched
+        final now      = DateTime.now();
+        final cacheAge = _positionFetchedAt != null
+            ? now.difference(_positionFetchedAt!).inMinutes
+            : _kPositionCacheMinutes + 1; // treat as stale if never fetched
 
-          if (_cachedPosition != null && cacheAge < _kPositionCacheMinutes) {
-            // ── Serve from cache (sub-millisecond) ─────────────────────────
-            lat      = _cachedPosition!.latitude;
-            lon      = _cachedPosition!.longitude;
-            accuracy = _cachedPosition!.accuracy;
-          } else {
-            // ── Fresh GPS fix ───────────────────────────────────────────────
-            final pos = await Geolocator.getCurrentPosition(
-              locationSettings: const LocationSettings(
-                accuracy:  LocationAccuracy.low,
-                timeLimit: Duration(seconds: 5),
-              ),
-            );
-            _cachedPosition    = pos;
-            _positionFetchedAt = now;
-            lat      = pos.latitude;
-            lon      = pos.longitude;
-            accuracy = pos.accuracy;
-          }
+        if (_cachedPosition != null && cacheAge < _kPositionCacheMinutes) {
+          // ── Serve from cache (sub-millisecond) ──────────────────────────
+          lat      = _cachedPosition!.latitude;
+          lon      = _cachedPosition!.longitude;
+          accuracy = _cachedPosition!.accuracy;
+        } else {
+          // ── Fresh GPS fix ────────────────────────────────────────────────
+          final pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy:  LocationAccuracy.low,
+              timeLimit: Duration(seconds: 5),
+            ),
+          );
+          _cachedPosition    = pos;
+          _positionFetchedAt = now;
+          lat      = pos.latitude;
+          lon      = pos.longitude;
+          accuracy = pos.accuracy;
         }
       }
     } catch (_) {
