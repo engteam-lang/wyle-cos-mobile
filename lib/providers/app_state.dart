@@ -126,7 +126,14 @@ class AppStateNotifier extends StateNotifier<AppState> {
     );
 
     // Re-hydrate tasks from the backend whenever we boot with a stored token.
-    if (token != null) loadObligationsFromApi();
+    if (token != null) {
+      loadObligationsFromApi();
+      // Renew the Gmail push-notification watch on every app launch.
+      // Gmail watches expire in ~7 days; calling this unconditionally is
+      // idempotent (the backend upserts the subscription) and ensures we
+      // never silently lose email push notifications after expiry.
+      if (googleAccounts.isNotEmpty) _registerGmailWatch();
+    }
   }
 
   // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -140,6 +147,10 @@ class AppStateNotifier extends StateNotifier<AppState> {
     // Register this device's FCM token with the backend so the server can
     // send push notifications to this specific device.
     _registerFcmToken();
+    // Register (or renew) the Gmail Pub/Sub watch so incoming emails trigger
+    // FCM push notifications.  Called here so a fresh Google-linked login
+    // always sets up the watch immediately.
+    _registerGmailWatch();
   }
 
   /// Fetches the FCM token from Firebase and POSTs it to /v1/users/me/devices.
@@ -168,6 +179,21 @@ class AppStateNotifier extends StateNotifier<AppState> {
     } catch (e) {
       // Non-fatal — app works fine without push notifications
       debugPrint('[FCM] Device registration failed: $e');
+    }
+  }
+
+  /// POSTs to POST /v1/integrations/google/gmail/watch so that Gmail notifies
+  /// the backend via Google Pub/Sub when new mail arrives, which then fans out
+  /// an FCM push to this device.
+  ///
+  /// Silent — never throws; Gmail watch is non-critical (app works without it).
+  /// No-op on web (push notifications are Android-only for now).
+  Future<void> _registerGmailWatch() async {
+    if (kIsWeb) return;
+    try {
+      await BuddyApiService.instance.registerGmailWatch();
+    } catch (e) {
+      debugPrint('[GmailWatch] Could not register watch from app_state: $e');
     }
   }
 

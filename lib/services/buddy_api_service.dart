@@ -3,7 +3,7 @@ import 'dart:typed_data';
 // dart:io's Platform class is not available on Flutter Web.
 // Use Flutter's defaultTargetPlatform instead (works everywhere).
 import 'package:flutter/foundation.dart'
-    show kIsWeb, defaultTargetPlatform, TargetPlatform;
+    show kIsWeb, defaultTargetPlatform, debugPrint, TargetPlatform;
 
 import 'package:dio/dio.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -337,6 +337,33 @@ class BuddyApiService {
   /// Returns a plain string confirmation from the backend.
   Future<void> triggerGoogleCalendarSync() async {
     await _dio.post('/integrations/google/calendar/sync');
+  }
+
+  /// POST /v1/integrations/google/gmail/watch
+  ///
+  /// Registers (or renews) a Gmail push-notification subscription so that
+  /// Google notifies the backend via Pub/Sub whenever a new email arrives.
+  /// The backend then fans out an FCM push to the user's registered devices.
+  ///
+  /// Watch subscriptions expire in ~7 days, so this should be called:
+  ///   • After login / Google OAuth (via [AppStateNotifier.setAuth])
+  ///   • On every app launch when Google is already connected
+  ///     (via [AppStateNotifier._loadPersistedState]) — cheap and idempotent.
+  ///
+  /// [labelIds] defaults to ['INBOX'] to watch only inbox messages.
+  /// Errors are non-fatal — logged and swallowed so the app keeps working.
+  Future<void> registerGmailWatch({
+    List<String> labelIds = const ['INBOX'],
+  }) async {
+    try {
+      await _dio.post('/integrations/google/gmail/watch', data: {
+        'label_ids': labelIds,
+      });
+      debugPrint('[GmailWatch] Watch registered successfully');
+    } catch (e) {
+      // Non-fatal — email push notifications degrade gracefully if this fails.
+      debugPrint('[GmailWatch] Registration failed (non-fatal): $e');
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
