@@ -13,14 +13,17 @@ import 'services/notification_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialise Firebase (required before any Firebase service call)
-  try {
-    await Firebase.initializeApp();
-    await NotificationService.instance.init();
-  } catch (e) {
-    // Firebase init can fail if google-services.json is missing in debug builds
-    // The app continues to work — push notifications simply won't be available
-    debugPrint('[Firebase] Init failed: $e');
+  // Initialise Firebase for push notifications — Android only.
+  // Web requires a separate FirebaseOptions config object; skipped for now
+  // since push notifications are only targeted at Android.
+  if (!kIsWeb) {
+    try {
+      await Firebase.initializeApp();
+      await NotificationService.instance.init();
+    } catch (e) {
+      // Non-fatal — app works fine without push notifications
+      debugPrint('[Firebase] Init failed: $e');
+    }
   }
 
   // On web, surface any uncaught Flutter errors to the browser console so

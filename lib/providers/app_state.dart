@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/obligation_model.dart';
@@ -144,7 +144,9 @@ class AppStateNotifier extends StateNotifier<AppState> {
 
   /// Fetches the FCM token from Firebase and POSTs it to /v1/users/me/devices.
   /// Silent — never throws; push notifications are non-critical.
+  /// No-op on web (Firebase not initialised on web build).
   Future<void> _registerFcmToken() async {
+    if (kIsWeb) return; // push notifications are Android-only for now
     try {
       final fcmToken = await NotificationService.instance.getToken(
         onTokenRefresh: (newToken) {
