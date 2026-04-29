@@ -75,15 +75,11 @@ dev_dependencies:
 flutter_launcher_icons:
   android: "ic_launcher"
   ios: false
-  # Base image for legacy Android (< API 26) — full square icon
-  image_path: "assets/logos/wyle_logo_teal.png"
-  # Adaptive icon for Android 8+ (API 26+)
-  # flutter_launcher_icons rasterises this PNG into mipmap-*dpi foreground
-  # PNGs.  A CI step then patches mipmap-anydpi-v26/ic_launcher.xml to wrap
-  # the foreground in drawable/ic_launcher_foreground.xml (<inset 15%>) so
-  # the logo sits inside the safe-zone on every launcher mask shape.
-  # Background: app's dark background colour
-  adaptive_icon_foreground: "assets/logos/wyle_logo_teal.png"
+  # Launcher source: logo pre-sized at 50% of canvas (25% padding each side)
+  # so the full W and E are visible on every Android launcher mask shape.
+  # Generated via assets/logos/wyle_logo_teal.png + Pillow at build time.
+  image_path: "assets/logos/wyle_launcher_icon.png"
+  adaptive_icon_foreground: "assets/logos/wyle_launcher_icon.png"
   adaptive_icon_background: "#000D12"
   min_sdk_android: 21
   web:
@@ -99,3 +95,4 @@ flutter:
     - assets/logos/wyle_logo_white.png
     - assets/logos/wyle_logo_teal.png
     - assets/logos/wyle_splash.png
+    - assets/logos/wyle_launcher_icon.png
