@@ -8,6 +8,9 @@ plugins {
 // the plugins-DSL resolver where Flutter's composite-build can intercept it.
 apply plugin: 'kotlin-android'
 
+// Firebase / FCM — must come AFTER com.android.application
+apply plugin: 'com.google.gms.google-services'
+
 // Flutter's Gradle plugin normally redirects build output to
 // {project_root}/build/app/ so `flutter build apk` can locate the APK.
 // In some CI environments this redirect doesn't take effect, and Gradle

@@ -25,6 +25,8 @@ buildscript {
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        // Required for Firebase / FCM push notifications
+        classpath 'com.google.gms:google-services:4.4.2'
     }
 }
 

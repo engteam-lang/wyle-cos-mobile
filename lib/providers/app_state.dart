@@ -9,6 +9,7 @@ import '../models/morning_brief_model.dart';
 import '../models/action_item_model.dart';
 import '../constants/app_constants.dart';
 import '../services/buddy_api_service.dart';
+import '../services/notification_service.dart';
 import '../utils/avatar_gender.dart';
 
 // ── App state model ───────────────────────────────────────────────────────────
@@ -136,6 +137,36 @@ class AppStateNotifier extends StateNotifier<AppState> {
     state = state.copyWith(token: token, user: user, isAuthenticated: true);
     // Pull the user's persisted tasks from the backend right after login.
     loadObligationsFromApi();
+    // Register this device's FCM token with the backend so the server can
+    // send push notifications to this specific device.
+    _registerFcmToken();
+  }
+
+  /// Fetches the FCM token from Firebase and POSTs it to /v1/users/me/devices.
+  /// Silent — never throws; push notifications are non-critical.
+  Future<void> _registerFcmToken() async {
+    try {
+      final fcmToken = await NotificationService.instance.getToken(
+        onTokenRefresh: (newToken) {
+          // Re-register whenever Firebase rotates the token
+          debugPrint('[FCM] Token rotated — re-registering with backend');
+          BuddyApiService.instance
+              .registerDevice(fcmToken: newToken)
+              .catchError((e) {
+            debugPrint('[FCM] Re-register failed: $e');
+          });
+        },
+      );
+      if (fcmToken == null) {
+        debugPrint('[FCM] No token available — skipping device registration');
+        return;
+      }
+      await BuddyApiService.instance.registerDevice(fcmToken: fcmToken);
+      debugPrint('[FCM] Device registered successfully');
+    } catch (e) {
+      // Non-fatal — app works fine without push notifications
+      debugPrint('[FCM] Device registration failed: $e');
+    }
   }
 
   /// Permanently deletes the account server-side then clears all local state.

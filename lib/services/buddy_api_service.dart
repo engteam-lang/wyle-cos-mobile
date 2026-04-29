@@ -138,8 +138,9 @@ class BuddyApiService {
     return res.data as Map<String, dynamic>;
   }
 
-  /// POST /v1/users/me/device — register FCM token after login
-  /// [platform] is 'android' or 'ios'
+  /// POST /v1/users/me/devices — register/upsert FCM token after login.
+  /// Upsert key: (user_id, fcm_token) — safe to call on every login.
+  /// [platform] defaults to 'android' on Android devices, 'ios' otherwise.
   Future<void> registerDevice({
     required String fcmToken,
     String? platform,
@@ -148,7 +149,7 @@ class BuddyApiService {
         (!kIsWeb && defaultTargetPlatform == TargetPlatform.android
             ? 'android'
             : 'ios');
-    await _dio.post('/users/me/device', data: {
+    await _dio.post('/users/me/devices', data: {
       'fcm_token': fcmToken,
       'platform':  plat,
     });

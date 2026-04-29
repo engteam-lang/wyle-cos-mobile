@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,9 +8,20 @@ import 'navigation/app_router.dart';
 import 'theme/app_theme.dart';
 import 'services/deep_link_service.dart';
 import 'services/auth_service.dart';
+import 'services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialise Firebase (required before any Firebase service call)
+  try {
+    await Firebase.initializeApp();
+    await NotificationService.instance.init();
+  } catch (e) {
+    // Firebase init can fail if google-services.json is missing in debug builds
+    // The app continues to work — push notifications simply won't be available
+    debugPrint('[Firebase] Init failed: $e');
+  }
 
   // On web, surface any uncaught Flutter errors to the browser console so
   // blank-screen issues are visible even in release builds.
