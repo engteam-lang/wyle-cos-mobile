@@ -424,12 +424,27 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     } catch (e) {
       await _overlayCtrl.reverse();
       if (!mounted) return;
+      debugPrint('[BrainDump] Error: $e');
+      // Show a friendly message — never expose raw DioException/SocketException
+      // to the user.  Diagnose the likely cause from the error type/message.
+      final errStr = e.toString().toLowerCase();
+      final friendlyMsg = errStr.contains('host lookup') ||
+              errStr.contains('socketexception') ||
+              errStr.contains('connection error') ||
+              errStr.contains('network')
+          ? "I couldn't reach the server. Please check your internet "
+            "connection and try again."
+          : errStr.contains('timeout')
+              ? "The request timed out. Please try again in a moment."
+              : errStr.contains('permission')
+                  ? "Microphone permission is required for voice notes."
+                  : "Sorry, I couldn't process your voice note. "
+                    "Please try again.";
       setState(() {
         _isBrainDumpProcessing = false;
         _partialText = '';
         _isProcessing = false;
-        _messages.add(ChatMessageModel.assistant(
-            'Sorry, I couldn\'t process your voice note. Error: $e\n\nPlease try again.'));
+        _messages.add(ChatMessageModel.assistant(friendlyMsg));
       });
     }
   }
@@ -522,10 +537,19 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       await VoiceService.instance.speak(response);
       if (mounted) setState(() => _isSpeaking = false);
     } catch (e) {
-      final errMsg = hasFile
-          ? "Sorry, I couldn't process that file right now. Please try again."
-          : "Sorry, I couldn't process that right now. Please check your "
-            "connection and try again.";
+      debugPrint('[SendMessage] Error: $e');
+      final errStr = e.toString().toLowerCase();
+      final errMsg = errStr.contains('host lookup') ||
+              errStr.contains('socketexception') ||
+              errStr.contains('connection error') ||
+              errStr.contains('network')
+          ? "I couldn't reach the server. Please check your internet "
+            "connection and try again."
+          : errStr.contains('timeout')
+              ? "The request timed out. Please try again in a moment."
+              : hasFile
+                  ? "Sorry, I couldn't process that file right now. Please try again."
+                  : "Sorry, I couldn't process that right now. Please try again.";
       setState(() {
         _messages.add(ChatMessageModel.assistant(errMsg));
         _isProcessing = false;
