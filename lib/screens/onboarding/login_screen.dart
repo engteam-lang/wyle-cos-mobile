@@ -489,21 +489,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     _stagger(5, _buildFooter()),
                     const SizedBox(height: 12),
                     
-                    GestureDetector(
-                      onTap: _showTokenDialog,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Text(
-                          'Already have a token?',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: const Color(0xFF2A6A78),
-                            decoration: TextDecoration.underline,
-                            decorationColor: const Color(0xFF2A6A78),
+                    // Token bypass — web only (developers use this to paste a
+                    // JWT from the browser OAuth flow; not needed on mobile
+                    // where deep-link callbacks work natively).
+                    if (kIsWeb)
+                      GestureDetector(
+                        onTap: _showTokenDialog,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Text(
+                            'Already have a token?',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: const Color(0xFF2A6A78),
+                              decoration: TextDecoration.underline,
+                              decorationColor: const Color(0xFF2A6A78),
+                            ),
                           ),
                         ),
                       ),
-                    ),
                     
                     const SizedBox(height: 16),
                   ],
