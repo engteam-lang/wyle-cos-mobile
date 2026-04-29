@@ -2404,6 +2404,8 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
     with TickerProviderStateMixin {
   late AnimationController _rippleCtrl;
   late AnimationController _orbCtrl;
+  late AnimationController _orbitCtrl; // electron-orbit dots during transcribing
+  late AnimationController _scanCtrl;  // bar sweep during transcribing
   List<double> _barHeights = List.filled(9, 8.0);
   Timer? _waveTimer;
   final _rand = Random();
@@ -2420,6 +2422,12 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
     _orbCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1400))
       ..repeat(reverse: true);
+    _orbitCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 2600))
+      ..repeat();
+    _scanCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1100))
+      ..repeat();
     if (!widget.isProcessing) _startWaveTimer();
   }
 
@@ -2452,6 +2460,8 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
   void dispose() {
     _rippleCtrl.dispose();
     _orbCtrl.dispose();
+    _orbitCtrl.dispose();
+    _scanCtrl.dispose();
     _waveTimer?.cancel();
     super.dispose();
   }
@@ -2465,6 +2475,159 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
       'Saving items…' => 'SAVING ITEMS',
       _               => 'BUDDY IS THINKING',
     };
+  }
+
+  // ── Listening orb (teal mic + expanding ripples) ────────────────────────────
+  Widget _buildListeningOrb() {
+    return SizedBox(
+      key: const ValueKey('listening'),
+      width: 260, height: 260,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          _rippleRing(0.66, 100, 0.20, 1.0),
+          _rippleRing(0.33, 100, 0.40, 1.5),
+          _rippleRing(0.00, 100, 0.65, 2.0),
+          AnimatedBuilder(
+            animation: _orbCtrl,
+            builder: (_, __) => Container(
+              width: 108, height: 108,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(
+                  color: _verdigris.withOpacity(0.28 + _orbCtrl.value * 0.22),
+                  blurRadius: 48, spreadRadius: 12,
+                )],
+              ),
+            ),
+          ),
+          Container(
+            width: 96, height: 96,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                const Color(0xFF22BBA8), _verdigris,
+                const Color(0xFF0A4A44), const Color(0xFF041A18),
+              ], stops: const [0.0, 0.35, 0.72, 1.0]),
+              boxShadow: [BoxShadow(
+                  color: _verdigris.withOpacity(0.55),
+                  blurRadius: 28, spreadRadius: 4)],
+            ),
+            child: const Icon(Icons.mic_rounded, color: Colors.white, size: 40),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Thinking orb (purple sparkle + orbiting electron dots) ─────────────────
+  Widget _buildThinkingOrb() {
+    const purple      = Color(0xFF7C3AED);
+    const lightPurple = Color(0xFFA78BFA);
+    const deepPurple  = Color(0xFF2D1B69);
+
+    return AnimatedBuilder(
+      key: const ValueKey('thinking'),
+      animation: Listenable.merge([_orbitCtrl, _orbCtrl]),
+      builder: (_, __) {
+        const orbitR = 84.0;
+        final angle  = _orbitCtrl.value * 2 * pi;
+
+        return SizedBox(
+          width: 260, height: 260,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              // Static orbit ring guides (very subtle)
+              Container(
+                width: 200, height: 200,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: purple.withOpacity(0.10), width: 1),
+                ),
+              ),
+              Container(
+                width: 150, height: 150,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: purple.withOpacity(0.16), width: 1),
+                ),
+              ),
+              // 3 orbiting electron dots with motion trails
+              ...List.generate(3, (i) {
+                final a     = angle + (i * 2 * pi / 3);
+                final aTrail= a - 0.45;
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Trail dot (smaller, behind)
+                    Transform.translate(
+                      offset: Offset(
+                          orbitR * cos(aTrail), orbitR * sin(aTrail)),
+                      child: Container(
+                        width: 5, height: 5,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: purple.withOpacity(0.45),
+                        ),
+                      ),
+                    ),
+                    // Main dot
+                    Transform.translate(
+                      offset: Offset(orbitR * cos(a), orbitR * sin(a)),
+                      child: Container(
+                        width: 10, height: 10,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: lightPurple,
+                          boxShadow: [BoxShadow(
+                            color: purple.withOpacity(0.8),
+                            blurRadius: 10, spreadRadius: 2,
+                          )],
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }),
+              // Pulsing purple glow aura
+              Container(
+                width: 108, height: 108,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(
+                    color: purple.withOpacity(0.28 + _orbCtrl.value * 0.24),
+                    blurRadius: 52, spreadRadius: 14,
+                  )],
+                ),
+              ),
+              // Center orb — purple sparkle (NOT mic)
+              Container(
+                width: 96, height: 96,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [lightPurple, purple, deepPurple,
+                        const Color(0xFF0D0A1A)],
+                    stops: const [0.0, 0.35, 0.72, 1.0],
+                  ),
+                  boxShadow: [BoxShadow(
+                    color: purple.withOpacity(0.55),
+                    blurRadius: 28, spreadRadius: 4,
+                  )],
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white, size: 36,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Widget _rippleRing(double phase, double maxExp, double maxOpacity, double sw) {
@@ -2502,79 +2665,73 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
                   _titleLabel,
                   key: ValueKey(_titleLabel),
                   style: GoogleFonts.inter(
-                      color: _verdigris.withOpacity(0.7),
+                      color: widget.isProcessing
+                          ? const Color(0xFFA78BFA).withOpacity(0.85)
+                          : _verdigris.withOpacity(0.7),
                       fontSize: 11, fontWeight: FontWeight.w600,
                       letterSpacing: 3.0),
                 ),
               ),
               const Spacer(),
-              SizedBox(
-                width: 260, height: 260,
-                child: Stack(
-                  alignment: Alignment.center,
-                  clipBehavior: Clip.none,
-                  children: [
-                    _rippleRing(0.66, 100, 0.20, 1.0),
-                    _rippleRing(0.33, 100, 0.40, 1.5),
-                    _rippleRing(0.00, 100, 0.65, 2.0),
-                    AnimatedBuilder(
-                      animation: _orbCtrl,
-                      builder: (_, __) => Container(
-                        width: 108, height: 108,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [BoxShadow(
-                            color: _verdigris
-                                .withOpacity(0.28 + _orbCtrl.value * 0.22),
-                            blurRadius: 48, spreadRadius: 12,
-                          )],
-                        ),
-                      ),
-                    ),
-                    Container(
-                      width: 96, height: 96,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(colors: [
-                          const Color(0xFF22BBA8), _verdigris,
-                          const Color(0xFF0A4A44), const Color(0xFF041A18),
-                        ], stops: const [0.0, 0.35, 0.72, 1.0]),
-                        boxShadow: [BoxShadow(
-                            color: _verdigris.withOpacity(0.55),
-                            blurRadius: 28, spreadRadius: 4)],
-                      ),
-                      child: const Icon(Icons.mic_rounded,
-                          color: Colors.white, size: 40),
-                    ),
-                  ],
-                ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                switchInCurve: Curves.easeOutBack,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, anim) => ScaleTransition(
+                  scale: anim, child: FadeTransition(opacity: anim, child: child)),
+                child: widget.isProcessing
+                    ? _buildThinkingOrb()
+                    : _buildListeningOrb(),
               ),
               const Spacer(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: List.generate(9, (i) {
-                  final isCenter = i == 4;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 3.5),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      curve: Curves.easeInOut,
-                      width: isCenter ? 5 : 4,
-                      height: _barHeights[i],
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(4),
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: isCenter
-                              ? [_verdigris, const Color(0xFFD5FF3F)]
-                              : [_verdigris.withOpacity(0.4), _verdigris],
+              AnimatedBuilder(
+                animation: _scanCtrl,
+                builder: (_, __) {
+                  final scanPos = _scanCtrl.value * 8.0;
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: List.generate(9, (i) {
+                      final isCenter = i == 4;
+                      // During processing: smooth scan sweep across bars
+                      final double barH;
+                      final List<Color> barColors;
+                      if (widget.isProcessing) {
+                        final dist = (i - scanPos).abs();
+                        final lit  = (1.0 - (dist / 3.5)).clamp(0.0, 1.0);
+                        barH = 4.0 + lit * 30.0;
+                        barColors = [
+                          Color.lerp(const Color(0xFF2D1B69),
+                              const Color(0xFF7C3AED), lit)!,
+                          Color.lerp(const Color(0xFF4C1D95),
+                              const Color(0xFFA78BFA), lit)!,
+                        ];
+                      } else {
+                        barH = _barHeights[i];
+                        barColors = isCenter
+                            ? [_verdigris, const Color(0xFFD5FF3F)]
+                            : [_verdigris.withOpacity(0.4), _verdigris];
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3.5),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 120),
+                          curve: Curves.easeInOut,
+                          width: isCenter ? 5 : 4,
+                          height: barH,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(4),
+                            gradient: LinearGradient(
+                              begin: Alignment.bottomCenter,
+                              end: Alignment.topCenter,
+                              colors: barColors,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                    }),
                   );
-                }),
+                },
               ),
               const SizedBox(height: 36),
               // Quoted pill — only shown during recording when there is real
@@ -2633,16 +2790,42 @@ class _VoiceRecordingOverlayState extends State<_VoiceRecordingOverlay>
               const Spacer(),
               // ── Bottom action ──────────────────────────────────────────────
               if (widget.isProcessing) ...[
-                // Processing state: spinner + status text
-                const CircularProgressIndicator(
-                  color: _verdigris, strokeWidth: 2.5),
-                const SizedBox(height: 16),
+                // Processing state: bouncing dots + status text
+                AnimatedBuilder(
+                  animation: _orbitCtrl,
+                  builder: (_, __) => Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(3, (i) {
+                      final bounce = sin(
+                          _orbitCtrl.value * 2 * pi + (i * pi / 1.5));
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 5),
+                        width: 8, height: 8,
+                        transform: Matrix4.translationValues(0, -bounce * 7, 0),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color.lerp(
+                            const Color(0xFF4C1D95),
+                            const Color(0xFFA78BFA),
+                            (bounce + 1) / 2,
+                          ),
+                          boxShadow: [BoxShadow(
+                            color: const Color(0xFF7C3AED)
+                                .withOpacity(0.4 + bounce * 0.3),
+                            blurRadius: 6,
+                          )],
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+                const SizedBox(height: 14),
                 Text(widget.partialText,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
-                        color: Colors.white70, fontSize: 13,
+                        color: const Color(0xFFA78BFA), fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        letterSpacing: 0.5)),
+                        letterSpacing: 0.8)),
                 const SizedBox(height: 48),
               ] else ...[
                 // Recording state: stop button
