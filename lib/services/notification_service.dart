@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
@@ -22,6 +24,15 @@ class NotificationService {
   static final NotificationService instance = NotificationService._();
 
   bool _initialised = false;
+
+  // ── Foreground message stream ──────────────────────────────────────────────
+  /// Broadcast stream of FCM messages received while the app is in the
+  /// foreground.  UI widgets listen to this to show in-app banners.
+  final _foregroundController =
+      StreamController<RemoteMessage>.broadcast();
+
+  Stream<RemoteMessage> get foregroundStream =>
+      _foregroundController.stream;
 
   // ── Init ───────────────────────────────────────────────────────────────────
 
@@ -57,12 +68,15 @@ class NotificationService {
       sound: true,
     );
 
-    // Listen for foreground messages
+    // Listen for foreground messages — broadcast to UI via foregroundStream
+    // so widgets can show in-app banners without a separate local-notification
+    // plugin.
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('[FCM] Foreground message received');
       debugPrint('[FCM]   title : ${message.notification?.title}');
       debugPrint('[FCM]   body  : ${message.notification?.body}');
       debugPrint('[FCM]   data  : ${message.data}');
+      _foregroundController.add(message); // notify UI
     });
 
     // Listen for notification tap when app is in background (not terminated)

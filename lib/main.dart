@@ -9,6 +9,7 @@ import 'theme/app_theme.dart';
 import 'services/deep_link_service.dart';
 import 'services/auth_service.dart';
 import 'services/notification_service.dart';
+import 'widgets/in_app_notification_banner.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -130,13 +131,16 @@ class _WyleAppState extends ConsumerState<WyleApp> {
       theme: AppTheme.dark,
       routerConfig: router,
       builder: (context, child) {
+        // 1. Clamp text scaling so nothing blows up on accessibility settings.
+        // 2. Wrap with InAppNotificationOverlay so foreground FCM pushes show
+        //    as a sliding top banner regardless of which screen is open.
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(
               MediaQuery.of(context).textScaler.scale(1.0).clamp(0.85, 1.15),
             ),
           ),
-          child: child!,
+          child: InAppNotificationOverlay(child: child!),
         );
       },
     );
