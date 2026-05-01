@@ -27,12 +27,29 @@ class NotificationService {
 
   // ── Foreground message stream ──────────────────────────────────────────────
   /// Broadcast stream of FCM messages received while the app is in the
-  /// foreground.  UI widgets listen to this to show in-app banners.
+  /// foreground.  The Buddy chat screen listens to this and renders each
+  /// message directly in the conversation.
   final _foregroundController =
       StreamController<RemoteMessage>.broadcast();
 
   Stream<RemoteMessage> get foregroundStream =>
       _foregroundController.stream;
+
+  /// Messages that arrived before the Buddy screen was mounted.
+  /// The Buddy screen drains this queue in initState so no notification
+  /// is ever silently dropped.
+  final List<RemoteMessage> _pendingMessages = [];
+
+  /// Returns all queued messages and clears the queue.
+  List<RemoteMessage> drainPending() {
+    final msgs = List<RemoteMessage>.from(_pendingMessages);
+    _pendingMessages.clear();
+    return msgs;
+  }
+
+  /// True while the Buddy chat screen is mounted and listening.
+  /// Used to decide whether to queue or immediately stream a message.
+  bool buddyIsListening = false;
 
   // ── Init ───────────────────────────────────────────────────────────────────
 
@@ -68,15 +85,20 @@ class NotificationService {
       sound: true,
     );
 
-    // Listen for foreground messages — broadcast to UI via foregroundStream
-    // so widgets can show in-app banners without a separate local-notification
-    // plugin.
+    // Listen for foreground messages.
+    // • If Buddy chat is mounted → stream immediately so it renders in chat.
+    // • Otherwise → queue so Buddy can drain it when it next opens.
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('[FCM] Foreground message received');
       debugPrint('[FCM]   title : ${message.notification?.title}');
       debugPrint('[FCM]   body  : ${message.notification?.body}');
       debugPrint('[FCM]   data  : ${message.data}');
-      _foregroundController.add(message); // notify UI
+      if (buddyIsListening) {
+        _foregroundController.add(message);
+      } else {
+        _pendingMessages.add(message);
+        debugPrint('[FCM] Buddy not active — queued (${_pendingMessages.length} pending)');
+      }
     });
 
     // Listen for notification tap when app is in background (not terminated)

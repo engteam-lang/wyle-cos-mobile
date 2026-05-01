@@ -26,7 +26,9 @@ import '../../providers/app_state.dart';
 import '../../services/ai_service.dart';
 import '../../services/brain_dump_service.dart';
 import '../../services/buddy_api_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/voice_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 const _bgTop      = Color(0xFF002F3A);   // matches login screen gradient top
@@ -133,6 +135,9 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   final TextEditingController  _textCtrl   = TextEditingController();
   final ScrollController       _scrollCtrl = ScrollController();
 
+  // Push-notification subscription — foreground messages render in chat
+  StreamSubscription<RemoteMessage>? _notifSub;
+
   bool           _isRecording          = false;
   bool           _isProcessing         = false;
   bool           _isSpeaking           = false;
@@ -167,13 +172,55 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
         parent: _overlayCtrl, curve: Curves.easeOutCubic);
     VoiceService.instance.init();
     _loadHistory();
-    // Proactively request location permission + pre-fetch initial fix so the
-    // first chat message already has lat/lon without any extra delay.
     _requestLocationPermission();
+    _initNotifications();
+  }
+
+  /// Subscribe to FCM foreground stream and drain any queued messages that
+  /// arrived before this screen was mounted.
+  void _initNotifications() {
+    if (kIsWeb) return; // push notifications are Android-only for now
+    final svc = NotificationService.instance;
+    svc.buddyIsListening = true;
+
+    // Drain messages that arrived while buddy was not open
+    final pending = svc.drainPending();
+    if (pending.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        for (final msg in pending) {
+          _addNotificationToChat(msg);
+        }
+        _scrollToBottom();
+      });
+    }
+
+    // Listen for live foreground notifications
+    _notifSub = svc.foregroundStream.listen((msg) {
+      if (!mounted) return;
+      _addNotificationToChat(msg);
+      _scrollToBottom();
+    });
+  }
+
+  /// Adds a received push notification as an assistant message in the chat.
+  void _addNotificationToChat(RemoteMessage msg) {
+    final title = msg.notification?.title ??
+        (msg.data['title'] as String? ?? 'Wyle');
+    final body  = msg.notification?.body  ??
+        (msg.data['body']  as String? ?? '');
+    final content = body.isNotEmpty
+        ? '🔔 **$title**\n\n$body'
+        : '🔔 **$title**';
+    setState(() {
+      _messages.add(ChatMessageModel.assistant(content));
+    });
+    _saveHistory();
   }
 
   @override
   void dispose() {
+    _notifSub?.cancel();
+    NotificationService.instance.buddyIsListening = false;
     _waveCtrl.dispose();
     _overlayCtrl.dispose();
     _textCtrl.dispose();

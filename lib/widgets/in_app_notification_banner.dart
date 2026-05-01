@@ -55,21 +55,12 @@ class _InAppNotificationOverlayState
   }
 
   void _onMessage(RemoteMessage message) {
-    if (!mounted) return;
-    final title = message.notification?.title ??
-        (message.data['title'] as String? ?? 'Wyle');
-    final body  = message.notification?.body  ??
-        (message.data['body']  as String? ?? '');
-
-    setState(() {
-      // Cap the stack — drop the oldest if we hit the limit
-      if (_banners.length >= _kMaxStack) _banners.removeAt(0);
-      _banners.add(_BannerEntry(
-        id:    DateTime.now().microsecondsSinceEpoch,
-        title: title,
-        body:  body,
-      ));
-    });
+    // Buddy chat screen now handles all foreground notifications by rendering
+    // them directly in the conversation.  The banner overlay is kept in place
+    // for future use (e.g. notifications on non-buddy screens) but is currently
+    // a no-op — NotificationService only emits to foregroundStream when
+    // buddyIsListening is true, and queues messages otherwise.
+    // If you need banners on other screens in future, remove this early return.
   }
 
   void _dismiss(int id) {
