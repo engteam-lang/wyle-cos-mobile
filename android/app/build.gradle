@@ -20,6 +20,15 @@ layout.buildDirectory = rootProject.layout.projectDirectory.dir("../build/app")
 
 android {
     namespace "com.wyle.wylecosapp"
+
+    signingConfigs {
+        debug {
+            storeFile     file('debug.keystore')
+            storePassword 'android'
+            keyAlias      'androiddebugkey'
+            keyPassword   'android'
+        }
+    }
     // compileSdk must be 36: flutter_secure_storage and flutter_tts both set
     // compileSdk 36 in their own Gradle files and the Android Gradle Plugin
     // requires compileSdk >= max(plugin compileSdk values).
@@ -49,8 +58,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
-            // Uses debug signing for now — add a proper keystore for production
+            // Uses same fixed debug keystore until a production keystore is set up
             signingConfig signingConfigs.debug
             minifyEnabled false
             shrinkResources false
