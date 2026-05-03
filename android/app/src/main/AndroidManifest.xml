@@ -68,9 +68,13 @@
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService"/>
             </intent-filter>
-            <meta-data
-                android:name="android.service.notification.default_filter_types"
-                android:value="conversations,alerting"/>
+            <!--
+                No default_filter_types here — that meta-data restricts which
+                notification categories Android delivers to this service.
+                Without it the service receives ALL notification types (social,
+                promo, email, alerting, etc.) and our Kotlin code does its own
+                filtering (blocklist, empty title/body, ongoing flag).
+            -->
         </service>
 
         <!-- Flutter embedding v2 -->

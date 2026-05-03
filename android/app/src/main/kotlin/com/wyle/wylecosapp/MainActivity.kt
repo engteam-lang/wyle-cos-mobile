@@ -23,6 +23,8 @@ class MainActivity : FlutterActivity() {
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                     NotificationEventChannel.sink = events
+                    // Deliver any notifications that arrived before Flutter subscribed
+                    NotificationEventChannel.flushPending()
                 }
                 override fun onCancel(arguments: Any?) {
                     NotificationEventChannel.sink = null

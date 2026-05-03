@@ -4,6 +4,7 @@ import android.app.Notification
 import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import android.util.Log
 import io.flutter.plugin.common.EventChannel
 
 /**
@@ -19,6 +20,10 @@ import io.flutter.plugin.common.EventChannel
  */
 class WyleNotificationListenerService : NotificationListenerService() {
 
+    companion object {
+        private const val TAG = "WyleNotifListener"
+    }
+
     // Apps whose notifications we never forward (system noise / our own)
     private val blocklist = setOf(
         "com.wyle.wylecosapp",          // Wyle itself
@@ -26,6 +31,20 @@ class WyleNotificationListenerService : NotificationListenerService() {
         "com.android.systemui",          // Status bar
         "com.google.android.gms",        // Play Services (silent background)
     )
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        Log.d(TAG, "Notification listener connected — ready to receive notifications")
+        // Flush any payloads that arrived before Flutter subscribed to the channel
+        NotificationEventChannel.flushPending()
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        Log.d(TAG, "Notification listener disconnected")
+        // Request rebind so the service comes back automatically
+        requestRebind(componentName)
+    }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val pkg = sbn.packageName ?: return
@@ -49,6 +68,8 @@ class WyleNotificationListenerService : NotificationListenerService() {
             pkg
         }
 
+        Log.d(TAG, "Notification from $appName ($pkg): $title")
+
         val payload = mapOf(
             "appName"     to appName,
             "packageName" to pkg,
@@ -57,8 +78,9 @@ class WyleNotificationListenerService : NotificationListenerService() {
             "timestamp"   to System.currentTimeMillis(),
         )
 
-        // Deliver to Flutter — sink is null until Flutter starts listening
-        NotificationEventChannel.sink?.success(payload)
+        // Deliver to Flutter — if sink is null (Flutter not yet listening),
+        // queue it so it's sent as soon as the channel is ready.
+        NotificationEventChannel.send(payload)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
@@ -69,4 +91,33 @@ class WyleNotificationListenerService : NotificationListenerService() {
 /** Shared singleton so MainActivity can set the EventSink. */
 object NotificationEventChannel {
     @Volatile var sink: EventChannel.EventSink? = null
+
+    // Payloads that arrived before Flutter subscribed to the EventChannel.
+    private val pending = mutableListOf<Map<String, Any>>()
+    private val lock    = Any()
+
+    /** Send a payload immediately if Flutter is listening, or queue it. */
+    fun send(payload: Map<String, Any>) {
+        synchronized(lock) {
+            if (sink != null) {
+                sink?.success(payload)
+            } else {
+                // Keep last 20 notifications max to avoid unbounded memory
+                if (pending.size >= 20) pending.removeAt(0)
+                pending.add(payload)
+            }
+        }
+    }
+
+    /**
+     * Called from [WyleNotificationListenerService.onListenerConnected] and
+     * from MainActivity when Flutter subscribes.  Drains any queued payloads.
+     */
+    fun flushPending() {
+        synchronized(lock) {
+            val s = sink ?: return
+            pending.forEach { s.success(it) }
+            pending.clear()
+        }
+    }
 }
