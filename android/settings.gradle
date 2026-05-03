@@ -13,6 +13,10 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+        // JetBrains CDN mirror of Maven Central — used as fallback when
+        // GitHub Actions runners are rate-limited (HTTP 403) by Maven Central.
+        maven { url "https://cache-redirector.jetbrains.com/repo1.maven.org/maven2" }
+        maven { url "https://cache-redirector.jetbrains.com/plugins.gradle.org" }
     }
 
     // Pin Kotlin plugin to 1.9.24 to match Flutter 3.29.3's bundled version.
