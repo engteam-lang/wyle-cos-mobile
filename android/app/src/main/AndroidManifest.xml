@@ -52,6 +52,27 @@
 
         </activity>
 
+        <!--
+            NotificationListenerService — captures notifications from other
+            apps so Buddy can surface payment alerts, delivery updates, etc.
+            The BIND_NOTIFICATION_LISTENER_SERVICE permission means only the
+            Android system can bind to this service (not other apps).
+            User must grant access via:
+              Settings → Apps → Special App Access → Notification Access → Wyle
+        -->
+        <service
+            android:name=".WyleNotificationListenerService"
+            android:label="@string/app_name"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.service.notification.default_filter_types"
+                android:value="conversations,alerting"/>
+        </service>
+
         <!-- Flutter embedding v2 -->
         <meta-data
             android:name="flutterEmbedding"

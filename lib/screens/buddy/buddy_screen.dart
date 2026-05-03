@@ -26,6 +26,7 @@ import '../../providers/app_state.dart';
 import '../../services/ai_service.dart';
 import '../../services/brain_dump_service.dart';
 import '../../services/buddy_api_service.dart';
+import '../../services/device_notification_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/voice_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -135,8 +136,12 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   final TextEditingController  _textCtrl   = TextEditingController();
   final ScrollController       _scrollCtrl = ScrollController();
 
-  // Push-notification subscription — foreground messages render in chat
+  // FCM push-notification subscription — foreground messages render in chat
   StreamSubscription<RemoteMessage>? _notifSub;
+
+  // Device notification listener (NotificationListenerService)
+  StreamSubscription<DeviceNotification>? _deviceNotifSub;
+  bool _deviceNotifAccessGranted = false;
 
   bool           _isRecording          = false;
   bool           _isProcessing         = false;
@@ -179,7 +184,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   /// Subscribe to FCM foreground stream and drain any queued messages that
   /// arrived before this screen was mounted.
   void _initNotifications() {
-    if (kIsWeb) return; // push notifications are Android-only for now
+    if (kIsWeb) return;
     final svc = NotificationService.instance;
     svc.buddyIsListening = true;
 
@@ -188,22 +193,51 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     if (pending.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         for (final msg in pending) {
-          _addNotificationToChat(msg);
+          _addFcmNotificationToChat(msg);
         }
         _scrollToBottom();
       });
     }
 
-    // Listen for live foreground notifications
+    // Live FCM foreground notifications
     _notifSub = svc.foregroundStream.listen((msg) {
       if (!mounted) return;
-      _addNotificationToChat(msg);
+      _addFcmNotificationToChat(msg);
+      _scrollToBottom();
+    });
+
+    // Device notification listener (other apps)
+    _initDeviceNotifications();
+  }
+
+  /// Checks notification-listener permission and subscribes to the device
+  /// notification stream if granted.
+  Future<void> _initDeviceNotifications() async {
+    if (kIsWeb) return;
+    final granted =
+        await DeviceNotificationService.instance.isAccessGranted();
+    if (!mounted) return;
+    setState(() => _deviceNotifAccessGranted = granted);
+
+    if (granted) {
+      _subscribeDeviceNotifications();
+    }
+    // If not granted the buddy screen shows a prompt card (see
+    // _buildDeviceNotifPrompt) so the user can enable it with one tap.
+  }
+
+  void _subscribeDeviceNotifications() {
+    _deviceNotifSub?.cancel();
+    _deviceNotifSub =
+        DeviceNotificationService.instance.stream.listen((notif) {
+      if (!mounted) return;
+      _addDeviceNotificationToChat(notif);
       _scrollToBottom();
     });
   }
 
-  /// Adds a received push notification as an assistant message in the chat.
-  void _addNotificationToChat(RemoteMessage msg) {
+  /// Adds a received FCM push notification as an assistant bubble.
+  void _addFcmNotificationToChat(RemoteMessage msg) {
     final title = msg.notification?.title ??
         (msg.data['title'] as String? ?? 'Wyle');
     final body  = msg.notification?.body  ??
@@ -211,8 +245,17 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     final content = body.isNotEmpty
         ? '🔔 **$title**\n\n$body'
         : '🔔 **$title**';
+    setState(() => _messages.add(ChatMessageModel.assistant(content)));
+    _saveHistory();
+  }
+
+  /// Adds a device notification from another app as an assistant bubble.
+  void _addDeviceNotificationToChat(DeviceNotification notif) {
+    final lines = <String>['📱 **${notif.appName}**'];
+    if (notif.title.isNotEmpty) lines.add(notif.title);
+    if (notif.body.isNotEmpty)  lines.add(notif.body);
     setState(() {
-      _messages.add(ChatMessageModel.assistant(content));
+      _messages.add(ChatMessageModel.assistant(lines.join('\n\n')));
     });
     _saveHistory();
   }
@@ -220,6 +263,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   @override
   void dispose() {
     _notifSub?.cancel();
+    _deviceNotifSub?.cancel();
     NotificationService.instance.buddyIsListening = false;
     _waveCtrl.dispose();
     _overlayCtrl.dispose();
@@ -1582,6 +1626,8 @@ Currency: AED. Context: Dubai, UAE.''';
                   ),
                   _buildNowPlayingBar(),
                   _buildAttachmentPreview(),
+                  if (!kIsWeb && !_deviceNotifAccessGranted)
+                    _buildDeviceNotifPrompt(),
                   _buildInputBar(),
                 ],
               ),
@@ -2323,6 +2369,55 @@ Currency: AED. Context: Dubai, UAE.''';
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  // ── Device Notification Access prompt ─────────────────────────────────────
+  /// Shown above the input bar when Wyle doesn't have notification-listener
+  /// permission.  Tapping "Enable" deep-links to Android settings.
+  Widget _buildDeviceNotifPrompt() {
+    return GestureDetector(
+      onTap: () async {
+        await DeviceNotificationService.instance.openSettings();
+        // Re-check after returning from Settings (user may have toggled it)
+        await Future.delayed(const Duration(milliseconds: 800));
+        if (!mounted) return;
+        final granted =
+            await DeviceNotificationService.instance.isAccessGranted();
+        if (!mounted) return;
+        setState(() => _deviceNotifAccessGranted = granted);
+        if (granted) _subscribeDeviceNotifications();
+      },
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: _verdigris.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _verdigris.withOpacity(0.25)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.notifications_active_outlined,
+                color: _verdigris, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Enable notification access so Buddy can see alerts from '
+                'AngelOne, Paytm, WhatsApp and other apps.',
+                style: GoogleFonts.inter(
+                    color: Colors.white70, fontSize: 12, height: 1.4),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text('Enable',
+                style: GoogleFonts.inter(
+                    color: _verdigris,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ],
         ),
       ),
     );
