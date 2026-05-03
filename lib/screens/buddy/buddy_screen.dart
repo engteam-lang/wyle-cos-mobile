@@ -507,12 +507,46 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
       final transcript = result.transcript.trim();
       if (transcript.isEmpty) return;
 
-      // Show user's voice message
+      // Capture and clear any pending attachment — if the user attached an
+      // image before recording, we want to send it with the transcript as
+      // caption so the AI can analyse both together.
+      final pendingFile = _attachedFile;
+      if (pendingFile != null && mounted) {
+        setState(() => _attachedFile = null);
+      }
+
+      // Show user's voice message (include file name when one was attached)
       setState(() {
-        _messages.add(ChatMessageModel.user('🎙️ $transcript'));
+        final userText = pendingFile != null
+            ? '🎙️ $transcript\n📎 ${pendingFile.name}'
+            : '🎙️ $transcript';
+        _messages.add(ChatMessageModel.user(userText));
         _isProcessing = true;
       });
       _scrollToBottom();
+
+      // ── If an image was attached, send it via the upload API and use that
+      // response (which has image context).  Fall through to brain-dump
+      // assistantContent only if the upload fails.
+      if (pendingFile != null) {
+        final uploadResp = await _sendViaUploadApi(pendingFile, transcript);
+        if (uploadResp != null && mounted) {
+          setState(() {
+            _messages.add(ChatMessageModel.assistant(uploadResp));
+            _isProcessing = false;
+          });
+          _saveHistory();
+          _scrollToBottom();
+          if (result.savedItemCount > 0 || result.suggestedActions.isNotEmpty) {
+            ref.read(appStateProvider.notifier).loadObligationsFromApi();
+          }
+          setState(() => _isSpeaking = true);
+          await VoiceService.instance.speak(uploadResp);
+          if (mounted) setState(() => _isSpeaking = false);
+          return;
+        }
+        // Upload failed — fall through and use brain-dump's assistantContent
+      }
 
       // ── Use Buddy's real assistant_content from the backend ───────────────
       // Fall back to a generic reply only when the backend returns empty (e.g.
@@ -1512,9 +1546,15 @@ Currency: AED. Context: Dubai, UAE.''';
   Future<void> _pickFromCamera() async {
     try {
       debugPrint('[Attach] 📷 Opening camera picker');
+      // Limit camera resolution to 1280×1280 and quality to 70% so the
+      // uploaded file stays well under the server's 10 MB limit.
+      // Full-resolution phone photos (12 MP+) at quality 90 easily exceed
+      // 5–8 MB and trigger HTTP 413 from the backend.
       final xf = await ImagePicker().pickImage(
-        source: ImageSource.camera,
-        imageQuality: 90,
+        source:       ImageSource.camera,
+        imageQuality: 70,
+        maxWidth:     1280,
+        maxHeight:    1280,
       );
       if (xf == null || !mounted) {
         debugPrint('[Attach] 📷 Camera cancelled or widget unmounted');
