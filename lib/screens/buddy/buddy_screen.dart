@@ -122,7 +122,7 @@ class BuddyScreen extends ConsumerStatefulWidget {
 }
 
 class _BuddyScreenState extends ConsumerState<BuddyScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
 
   static const _kChatMessages = 'wyle_buddy_messages';
   static const _kChatDate     = 'wyle_buddy_date';
@@ -208,6 +208,10 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
     // Device notification listener (other apps)
     _initDeviceNotifications();
+
+    // Re-check device notification permission and re-subscribe when returning
+    // from background (e.g. after enabling access in Android Settings).
+    WidgetsBinding.instance.addObserver(this);
   }
 
   /// Checks notification-listener permission and subscribes to the device
@@ -261,7 +265,19 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !kIsWeb) {
+      // Re-check permission and re-subscribe every time the user returns to the
+      // app.  Covers the case where they just toggled Wyle in Android Settings
+      // and the 800 ms onTap delay wasn't sufficient, or the EventChannel stream
+      // broke while the app was in the background.
+      _initDeviceNotifications();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _notifSub?.cancel();
     _deviceNotifSub?.cancel();
     NotificationService.instance.buddyIsListening = false;

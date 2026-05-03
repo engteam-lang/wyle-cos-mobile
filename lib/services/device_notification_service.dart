@@ -61,6 +61,9 @@ class DeviceNotificationService {
         })
         .handleError((dynamic e) {
           debugPrint('[DeviceNotif] Stream error: $e');
+          // Reset so the stream is recreated on the next subscription attempt
+          // (e.g. when the user returns to the app from background).
+          _stream = null;
         });
     return _stream!;
   }
