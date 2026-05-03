@@ -2214,7 +2214,12 @@ Currency: AED. Context: Dubai, UAE.''';
         children: [
           // ── Tasks FAB — green gradient + badge ─────────────────────────
           GestureDetector(
-            onTap: () => _showTasksBottomSheet(context),
+            onTap: () {
+              // Refresh action items from backend every time the user opens
+              // the task list, so they always see the latest data.
+              ref.read(appStateProvider.notifier).loadObligationsFromApi();
+              _showTasksBottomSheet(context);
+            },
             child: Stack(
               clipBehavior: Clip.none,
               children: [
