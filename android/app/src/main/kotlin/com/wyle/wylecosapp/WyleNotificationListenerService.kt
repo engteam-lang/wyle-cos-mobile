@@ -1,6 +1,7 @@
 package com.wyle.wylecosapp
 
 import android.app.Notification
+import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -43,7 +44,7 @@ class WyleNotificationListenerService : NotificationListenerService() {
         super.onListenerDisconnected()
         Log.d(TAG, "Notification listener disconnected")
         // Request rebind so the service comes back automatically
-        requestRebind(componentName)
+        requestRebind(ComponentName(this, WyleNotificationListenerService::class.java))
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
