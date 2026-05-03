@@ -299,7 +299,34 @@ class AppStateNotifier extends StateNotifier<AppState> {
     if (state.token == null) return;
     try {
       final items = await BuddyApiService.instance.getActionItems();
-      final apiObs = items.map(_actionItemToObligation).toList();
+
+      // For calendar-sourced meetings and events, drop any item whose scheduled
+      // date is strictly before today (midnight).  Tasks and reminders are kept
+      // regardless of their date so the user can still see and dismiss them.
+      final now       = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+
+      final filtered = items.where((item) {
+        final isCalendarItem =
+            item.kind == 'meeting' || item.kind == 'event';
+        if (!isCalendarItem) return true; // always keep tasks / reminders
+
+        final dateStr = item.startsAt ?? item.remindAt;
+        if (dateStr == null) return true; // no date → keep it
+
+        try {
+          final cleanIso =
+              dateStr.length > 19 ? dateStr.substring(0, 19) : dateStr;
+          final parsed  = DateTime.parse(cleanIso);
+          final itemDay = DateTime(parsed.year, parsed.month, parsed.day);
+          // Keep only meetings/events that start today or in the future
+          return !itemDay.isBefore(todayStart);
+        } catch (_) {
+          return true; // unparseable date → keep it to be safe
+        }
+      }).toList();
+
+      final apiObs = filtered.map(_actionItemToObligation).toList();
       state = state.copyWith(obligations: apiObs);
     } catch (_) {
       // Network error — keep current state, don't show an error to the user
