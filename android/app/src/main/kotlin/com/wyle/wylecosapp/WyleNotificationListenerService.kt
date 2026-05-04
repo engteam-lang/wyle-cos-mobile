@@ -3,6 +3,8 @@ package com.wyle.wylecosapp
 import android.app.Notification
 import android.content.ComponentName
 import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -97,11 +99,16 @@ object NotificationEventChannel {
     private val pending = mutableListOf<Map<String, Any>>()
     private val lock    = Any()
 
+    // Always dispatch EventSink calls on the main thread — Flutter requires it.
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     /** Send a payload immediately if Flutter is listening, or queue it. */
     fun send(payload: Map<String, Any>) {
         synchronized(lock) {
-            if (sink != null) {
-                sink?.success(payload)
+            val s = sink
+            if (s != null) {
+                // Capture sink reference now; dispatch to main thread for Flutter.
+                mainHandler.post { s.success(payload) }
             } else {
                 // Keep last 20 notifications max to avoid unbounded memory
                 if (pending.size >= 20) pending.removeAt(0)
@@ -117,8 +124,9 @@ object NotificationEventChannel {
     fun flushPending() {
         synchronized(lock) {
             val s = sink ?: return
-            pending.forEach { s.success(it) }
+            val toDeliver = pending.toList()
             pending.clear()
+            mainHandler.post { toDeliver.forEach { s.success(it) } }
         }
     }
 }

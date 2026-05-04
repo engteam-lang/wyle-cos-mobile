@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 /// A single notification captured from another app on the device.
 class DeviceNotification {
@@ -41,6 +42,9 @@ class DeviceNotificationService {
 
   Stream<DeviceNotification>? _stream;
 
+  // Callback invoked when the stream errors so the caller can resubscribe.
+  VoidCallback? onStreamError;
+
   /// Broadcast stream of notifications from other apps.
   /// Empty/no-op on web.
   Stream<DeviceNotification> get stream {
@@ -60,10 +64,11 @@ class DeviceNotificationService {
           );
         })
         .handleError((dynamic e) {
-          debugPrint('[DeviceNotif] Stream error: $e');
-          // Reset so the stream is recreated on the next subscription attempt
-          // (e.g. when the user returns to the app from background).
+          debugPrint('[DeviceNotif] Stream error: $e — will resubscribe');
+          // Reset so the stream is recreated on the next subscription attempt.
           _stream = null;
+          // Notify caller so it can resubscribe without waiting for a lifecycle event.
+          onStreamError?.call();
         });
     return _stream!;
   }

@@ -232,6 +232,12 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
 
   void _subscribeDeviceNotifications() {
     _deviceNotifSub?.cancel();
+    // Register error callback so we resubscribe immediately if the
+    // EventChannel stream dies (without waiting for a lifecycle event).
+    DeviceNotificationService.instance.onStreamError = () {
+      if (!mounted) return;
+      _subscribeDeviceNotifications();
+    };
     _deviceNotifSub =
         DeviceNotificationService.instance.stream.listen((notif) {
       if (!mounted) return;
@@ -280,6 +286,7 @@ class _BuddyScreenState extends ConsumerState<BuddyScreen>
     WidgetsBinding.instance.removeObserver(this);
     _notifSub?.cancel();
     _deviceNotifSub?.cancel();
+    DeviceNotificationService.instance.onStreamError = null;
     NotificationService.instance.buddyIsListening = false;
     _waveCtrl.dispose();
     _overlayCtrl.dispose();
